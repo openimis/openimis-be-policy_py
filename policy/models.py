@@ -31,7 +31,7 @@ class Policy(models.Model):
 
     offline = models.BooleanField(db_column='isOffline', blank=True, null=True)
     audit_user_id = models.IntegerField(db_column='AuditUserID')
-    row_id = models.TextField(db_column='RowID', blank=True, null=True)
+    row_id = models.BinaryField(db_column='RowID', blank=True, null=True)
 
     class Meta:
         managed = False
