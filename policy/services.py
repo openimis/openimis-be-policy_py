@@ -119,7 +119,7 @@ class EligibilityResponse(object):
     def __init__(self, eligibility_request, prod_id=None, total_admissions_left=0, total_visits_left=0, total_consultations_left=0, total_surgeries_left=0,
                  total_deliveries_left=0, total_antenatal_left=0, consultation_amount_left=0, surgery_amount_left=0, delivery_amount_left=0,
                  hospitalization_amount_left=0, antenatal_amount_left=0,
-                 min_date_service=0, min_date_item=0, service_left=0, item_left=0, is_item_ok=0, is_service_ok=0):
+                 min_date_service=None, min_date_item=None, service_left=0, item_left=0, is_item_ok=0, is_service_ok=0):
         self.eligibility_request = eligibility_request
         self.prod_id = prod_id
         self.total_admissions_left = total_admissions_left

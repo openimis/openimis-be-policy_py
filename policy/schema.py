@@ -55,9 +55,17 @@ class Query(graphene.ObjectType):
     )
     policy_eligibility_by_insuree = graphene.Field(
         EligibilityGraphQLType,
+        chfId=graphene.String(required=True)
+    )
+    policy_item_eligibility_by_insuree = graphene.Field(
+        EligibilityGraphQLType,
         chfId=graphene.String(required=True),
-        serviceCode=graphene.String(),
-        itemCode=graphene.String()
+        itemCode=graphene.String(required=True)
+    )
+    policy_service_eligibility_by_insuree = graphene.Field(
+        EligibilityGraphQLType,
+        chfId=graphene.String(required=True),
+        serviceCode=graphene.String(required=True),
     )
 
     @staticmethod
@@ -85,14 +93,9 @@ class Query(graphene.ObjectType):
                 lambda x: Query._to_policy_by_insuree_item(x), resp.items))
         )
 
-    def resolve_policy_eligibility_by_insuree(self, info, **kwargs):
-        chf_id = kwargs.get('chfId')
-        req = EligibilityRequest(
-            chf_id=chf_id,
-            service_code=kwargs.get('serviceCode'),
-            item_code=kwargs.get('itemCode')
-        )
-        resp = EligibilityService(user=info.context.user).request(req)
+    @staticmethod
+    def _resolve_policy_eligibility_by_insuree(user, req):
+        resp = EligibilityService(user=user).request(req)
         return EligibilityGraphQLType(
             prod_id=resp.prod_id,
             total_admissions_left=resp.total_admissions_left,
@@ -112,4 +115,33 @@ class Query(graphene.ObjectType):
             item_left=resp.item_left,
             is_item_ok=resp.is_item_ok,
             is_service_ok=resp.is_service_ok
+        )
+
+    def resolve_policy_eligibility_by_insuree(self, info, **kwargs):
+        req = EligibilityRequest(
+            chf_id=kwargs.get('chfId')
+        )
+        return Query._resolve_policy_eligibility_by_insuree(
+            user=info.context.user,
+            req=req
+        )
+
+    def resolve_policy_item_eligibility_by_insuree(self, info, **kwargs):
+        req = EligibilityRequest(
+            chf_id=kwargs.get('chfId'),
+            item_code=kwargs.get('itemCode')
+        )
+        return Query._resolve_policy_eligibility_by_insuree(
+            user=info.context.user,
+            req=req
+        )
+
+    def resolve_policy_service_eligibility_by_insuree(self, info, **kwargs):
+        req = EligibilityRequest(
+            chf_id=kwargs.get('chfId'),
+            service_code=kwargs.get('serviceCode')
+        )
+        return Query._resolve_policy_eligibility_by_insuree(
+            user=info.context.user,
+            req=req
         )
