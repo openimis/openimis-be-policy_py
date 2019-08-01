@@ -5,12 +5,7 @@ from .services import ByInsureeRequest, ByInsureeResponse, ByInsureeService
 from .services import EligibilityRequest, EligibilityService
 
 
-class PolicyType(DjangoObjectType):
-    class Meta:
-        model = Policy
-
-
-class PolicyByInsureeItem(graphene.ObjectType):
+class PolicyByInsureeItemGraphQLType(graphene.ObjectType):
     product_code = graphene.String()
     product_name = graphene.String()
     expiry_date = graphene.Date()
@@ -22,8 +17,8 @@ class PolicyByInsureeItem(graphene.ObjectType):
     ceiling2 = graphene.Float()
 
 
-class PoliciesByInsureeType(graphene.ObjectType):
-    items = graphene.List(PolicyByInsureeItem)
+class PoliciesByInsureeGraphQLType(graphene.ObjectType):
+    items = graphene.List(PolicyByInsureeItemGraphQLType)
 
 
 class EligibilityGraphQLType(graphene.ObjectType):
@@ -49,7 +44,7 @@ class EligibilityGraphQLType(graphene.ObjectType):
 
 class Query(graphene.ObjectType):
     policies_by_insuree = graphene.Field(
-        PoliciesByInsureeType,
+        PoliciesByInsureeGraphQLType,
         chfId=graphene.String(required=True),
         locationId=graphene.Int()
     )
@@ -70,7 +65,7 @@ class Query(graphene.ObjectType):
 
     @staticmethod
     def _to_policy_by_insuree_item(item):
-        return PolicyByInsureeItem(
+        return PolicyByInsureeItemGraphQLType(
             product_code=item.product_code,
             product_name=item.product_name,
             expiry_date=item.expiry_date,
@@ -88,7 +83,7 @@ class Query(graphene.ObjectType):
             location_id=kwargs.get('locationId') or 0
         )
         resp = ByInsureeService(user=info.context.user).request(req)
-        return PoliciesByInsureeType(
+        return PoliciesByInsureeGraphQLType(
             items=tuple(map(
                 lambda x: Query._to_policy_by_insuree_item(x), resp.items))
         )
