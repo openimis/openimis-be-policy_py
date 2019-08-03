@@ -2,10 +2,15 @@ import graphene
 from graphene_django import DjangoObjectType
 from .models import Policy
 from .services import ByInsureeRequest, ByInsureeResponse, ByInsureeService
+from .services import BalanceRequest, BalanceResponse, BalanceService
 from .services import EligibilityRequest, EligibilityService
 
 
 class PolicyByInsureeItemGraphQLType(graphene.ObjectType):
+    # policy_id = graphene.Int()
+    # policy_value = graphene.Float()
+    # premiums_amount = graphene.Float()
+    # balance = graphene.Float()
     product_code = graphene.String()
     product_name = graphene.String()
     expiry_date = graphene.Date()
@@ -15,6 +20,15 @@ class PolicyByInsureeItemGraphQLType(graphene.ObjectType):
     ded2 = graphene.Float()
     ceiling1 = graphene.Float()
     ceiling2 = graphene.Float()
+
+
+class PolicyBalanceGraphQLType(graphene.ObjectType):
+    family_id = graphene.Int()
+    product_code = graphene.String()
+    policy_id = graphene.Int()
+    policy_value = graphene.Float()
+    premiums_amount = graphene.Float()
+    balance = graphene.Float()
 
 
 class PoliciesByInsureeGraphQLType(graphene.ObjectType):
@@ -48,6 +62,11 @@ class Query(graphene.ObjectType):
         chfId=graphene.String(required=True),
         locationId=graphene.Int()
     )
+    policy_balance = graphene.Field(
+        PolicyBalanceGraphQLType,
+        familyId=graphene.Int(required=True),
+        productCode=graphene.String(required=True)
+    )
     policy_eligibility_by_insuree = graphene.Field(
         EligibilityGraphQLType,
         chfId=graphene.String(required=True)
@@ -66,6 +85,10 @@ class Query(graphene.ObjectType):
     @staticmethod
     def _to_policy_by_insuree_item(item):
         return PolicyByInsureeItemGraphQLType(
+            # policy_id=item.policy_id,
+            # policy_value=item.policy_value,
+            # premiums_amount=item.premiums_amount,
+            # balance=item.balance,
             product_code=item.product_code,
             product_name=item.product_name,
             expiry_date=item.expiry_date,
@@ -80,36 +103,54 @@ class Query(graphene.ObjectType):
     def resolve_policies_by_insuree(self, info, **kwargs):
         req = ByInsureeRequest(
             chf_id=kwargs.get('chfId'),
+            family_id=kwargs.get('familyId'),
             location_id=kwargs.get('locationId') or 0
         )
-        resp = ByInsureeService(user=info.context.user).request(req)
+        res = ByInsureeService(user=info.context.user).request(req)
         return PoliciesByInsureeGraphQLType(
             items=tuple(map(
-                lambda x: Query._to_policy_by_insuree_item(x), resp.items))
+                lambda x: Query._to_policy_by_insuree_item(x), res.items))
+        )
+
+    def resolve_policy_balance(self, info, **kwargs):
+        family_id = kwargs.get('familyId')
+        product_code = kwargs.get('productCode')
+        req = BalanceRequest(
+            family_id=family_id,
+            product_code=product_code
+        )
+        res = BalanceService(user=info.context.user).request(req)
+        return PolicyBalanceGraphQLType(
+            family_id=family_id,
+            product_code=product_code,
+            policy_id=res.policy_id,
+            policy_value=res.policy_value,
+            premiums_amount=res.premiums_amount,
+            balance=res.balance
         )
 
     @staticmethod
     def _resolve_policy_eligibility_by_insuree(user, req):
-        resp = EligibilityService(user=user).request(req)
+        res = EligibilityService(user=user).request(req)
         return EligibilityGraphQLType(
-            prod_id=resp.prod_id,
-            total_admissions_left=resp.total_admissions_left,
-            total_visits_left=resp.total_visits_left,
-            total_consultations_left=resp.total_consultations_left,
-            total_surgeries_left=resp.total_surgeries_left,
-            total_deliveries_left=resp.total_deliveries_left,
-            total_antenatal_left=resp.total_antenatal_left,
-            consultation_amount_left=resp.consultation_amount_left,
-            surgery_amount_left=resp.surgery_amount_left,
-            delivery_amount_left=resp.delivery_amount_left,
-            hospitalization_amount_left=resp.hospitalization_amount_left,
-            antenatal_amount_left=resp.antenatal_amount_left,
-            min_date_service=resp.min_date_service,
-            min_date_item=resp.min_date_item,
-            service_left=resp.service_left,
-            item_left=resp.item_left,
-            is_item_ok=resp.is_item_ok,
-            is_service_ok=resp.is_service_ok
+            prod_id=res.prod_id,
+            total_admissions_left=res.total_admissions_left,
+            total_visits_left=res.total_visits_left,
+            total_consultations_left=res.total_consultations_left,
+            total_surgeries_left=res.total_surgeries_left,
+            total_deliveries_left=res.total_deliveries_left,
+            total_antenatal_left=res.total_antenatal_left,
+            consultation_amount_left=res.consultation_amount_left,
+            surgery_amount_left=res.surgery_amount_left,
+            delivery_amount_left=res.delivery_amount_left,
+            hospitalization_amount_left=res.hospitalization_amount_left,
+            antenatal_amount_left=res.antenatal_amount_left,
+            min_date_service=res.min_date_service,
+            min_date_item=res.min_date_item,
+            service_left=res.service_left,
+            item_left=res.item_left,
+            is_item_ok=res.is_item_ok,
+            is_service_ok=res.is_service_ok
         )
 
     def resolve_policy_eligibility_by_insuree(self, info, **kwargs):

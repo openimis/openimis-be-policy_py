@@ -1,5 +1,7 @@
 from django.db import models
 from core import fields
+from insuree.models import Family
+from product.models import Product
 
 
 class Policy(models.Model):
@@ -14,7 +16,7 @@ class Policy(models.Model):
     value = models.DecimalField(
         db_column='PolicyValue', max_digits=18, decimal_places=2, blank=True, null=True)
 
-    # familyid = models.ForeignKey(Tblfamilies, models.DO_NOTHING, db_column='FamilyID')
+    family = models.ForeignKey(Family, models.DO_NOTHING, db_column='FamilyID')
     enroll_date = fields.DateField(db_column='EnrollDate')
     start_date = fields.DateField(db_column='StartDate')
     effective_date = fields.DateField(
@@ -22,7 +24,7 @@ class Policy(models.Model):
     expiry_date = fields.DateField(
         db_column='ExpiryDate', blank=True, null=True)
 
-    # prodid = models.ForeignKey('Tblproduct', models.DO_NOTHING, db_column='ProdID')
+    product = models.ForeignKey(Product, models.DO_NOTHING, db_column='ProdID')
     # officerid = models.ForeignKey(Tblofficer, models.DO_NOTHING, db_column='OfficerID', blank=True, null=True)
 
     validity_from = fields.DateTimeField(db_column='ValidityFrom')

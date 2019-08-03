@@ -1,16 +1,22 @@
 from django.db import connection
+from django.db.models import Q
 import xml.etree.ElementTree as ET
 from django.core.exceptions import PermissionDenied
 import re
 from datetime import datetime as py_datetime
 import core
+from .models import Policy
+from product.models import Product
+from contribution.services import ByPolicyPremiumsAmountService
 
 
+# --- BY INSUREE ---
 @core.comparable
 class ByInsureeRequest(object):
 
-    def __init__(self, chf_id, location_id=0):
+    def __init__(self, chf_id, family_id, location_id=0):
         self.chf_id = chf_id
+        self.family_id = family_id
         self.location_id = location_id
 
     def __eq__(self, other):
@@ -22,6 +28,12 @@ class ByInsureeResponseItem(object):
 
     def __init__(self, product_code, product_name, expiry_date, status,
                  ded_type, ded1, ded2, ceiling1, ceiling2):
+        # def __init__(self, policy_id, policy_value, premiums_amount, balance, product_code, product_name, expiry_date, status,
+        #              ded_type, ded1, ded2, ceiling1, ceiling2):
+        # self.policy_id = policy_id
+        # self.policy_value = policy_value
+        # self.premiums_amount = premiums_amount
+        # self.balance = balance
         self.product_code = product_code
         self.product_name = product_name
         self.expiry_date = expiry_date
@@ -61,6 +73,10 @@ class ByInsureeService(object):
         else:
             expiry_date = None
         return ByInsureeResponseItem(
+            # policy_id=None,
+            # policy_value=None,
+            # premiums_amount=None,
+            # balance=None,
             product_code=row[5],
             product_name=row[6],
             expiry_date=expiry_date,
@@ -73,8 +89,6 @@ class ByInsureeService(object):
         )
 
     def request(self, by_insuree_request):
-        if self.user.is_anonymous or not self.user.has_perm('policy.can_view'):
-            raise PermissionDenied
         with connection.cursor() as cur:
             sql = """\
                 EXEC [dbo].[uspPolicyInquiry] @CHFID = %s, @LocationId = %s;
@@ -99,6 +113,58 @@ class ByInsureeService(object):
                 by_insuree_request=by_insuree_request,
                 items=items
             )
+
+
+# --- BALANCE ---
+@core.comparable
+class BalanceRequest(object):
+
+    def __init__(self, family_id, product_code):
+        self.family_id = family_id
+        self.product_code = product_code
+
+    def __eq__(self, other):
+        return isinstance(other, self.__class__) and self.__dict__ == other.__dict__
+
+
+@core.comparable
+class BalanceResponse(object):
+
+    def __init__(self, balance_request, policy_id, policy_value, premiums_amount, balance):
+        self.balance_request = balance_request
+        self.policy_id = policy_id
+        self.policy_value = policy_value
+        self.premiums_amount = premiums_amount
+        self.balance = balance
+
+    def __eq__(self, other):
+        return isinstance(other, self.__class__) and self.__dict__ == other.__dict__
+
+
+class BalanceService(object):
+
+    def __init__(self, user):
+        self.user = user
+
+    def request(self, req):
+        prod = Product.objects.get(
+            Q(code=req.product_code),
+            *core.utils.filter_validity(())
+        )
+        pol = Policy.objects.get(
+            Q(family_id=req.family_id),
+            Q(product_id=prod.id),
+            *core.utils.filter_validity(())
+        )
+        premiumsAmountService = ByPolicyPremiumsAmountService(user=self.user)
+        premiums_amount = premiumsAmountService.request(pol.id)
+        return BalanceResponse(
+            balance_request=req,
+            policy_id=pol.id,
+            policy_value=pol.value,
+            premiums_amount=premiums_amount,
+            balance=pol.value - premiums_amount
+        )
 
 
 @core.comparable
