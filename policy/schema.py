@@ -57,6 +57,11 @@ class EligibilityGraphQLType(graphene.ObjectType):
 
 
 class Query(graphene.ObjectType):
+    # TODO: refactoring
+    # A Policy is bound to a Family
+    # ... and should not make the asumption that a Family
+    # is made of 'Insurees'
+    # This requires to refactor the ByInsureeService
     policies_by_insuree = graphene.Field(
         PoliciesByInsureeGraphQLType,
         chfId=graphene.String(required=True),
@@ -67,6 +72,10 @@ class Query(graphene.ObjectType):
         familyId=graphene.Int(required=True),
         productCode=graphene.String(required=True)
     )
+    # TODO: refactoring
+    # Eligibility is calculated for a Policy
+    # ... which is bound to a Family (not an Insuree)
+    # This requires to refactor the EligibilityService
     policy_eligibility_by_insuree = graphene.Field(
         EligibilityGraphQLType,
         chfId=graphene.String(required=True)
@@ -85,10 +94,14 @@ class Query(graphene.ObjectType):
     @staticmethod
     def _to_policy_by_insuree_item(item):
         return PolicyByInsureeItemGraphQLType(
+            # TODO: return the policy (summary) info
+            # Requires to denormalize database for the premiums_amount
+            # ---
             # policy_id=item.policy_id,
             # policy_value=item.policy_value,
             # premiums_amount=item.premiums_amount,
             # balance=item.balance,
+            # ---
             product_code=item.product_code,
             product_name=item.product_name,
             expiry_date=item.expiry_date,
@@ -103,7 +116,6 @@ class Query(graphene.ObjectType):
     def resolve_policies_by_insuree(self, info, **kwargs):
         req = ByInsureeRequest(
             chf_id=kwargs.get('chfId'),
-            family_id=kwargs.get('familyId'),
             location_id=kwargs.get('locationId') or 0
         )
         res = ByInsureeService(user=info.context.user).request(req)

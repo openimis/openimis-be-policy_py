@@ -11,12 +11,15 @@ from contribution.services import ByPolicyPremiumsAmountService
 
 
 # --- BY INSUREE ---
+# TODO: should become "BY FAMILY":
+# A Policy is bound to a Family
+# ... and should not make any assumption on what a Family looks like!
+# -------------------
 @core.comparable
 class ByInsureeRequest(object):
 
-    def __init__(self, chf_id, family_id, location_id=0):
+    def __init__(self, chf_id, location_id=0):
         self.chf_id = chf_id
-        self.family_id = family_id
         self.location_id = location_id
 
     def __eq__(self, other):
@@ -166,7 +169,11 @@ class BalanceService(object):
             balance=pol.value - premiums_amount
         )
 
-
+# --- ELIGIBILITY --
+# TODO: should become "BY FAMILY":
+# Eligibility is calculated from a Policy
+# ... which is bound to a Family (same remark as ByInsureeService)
+# -------------------
 @core.comparable
 class EligibilityRequest(object):
 
