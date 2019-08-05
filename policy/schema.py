@@ -70,7 +70,8 @@ class Query(graphene.ObjectType):
     policy_balance = graphene.Field(
         PolicyBalanceGraphQLType,
         familyId=graphene.Int(required=True),
-        productCode=graphene.String(required=True)
+        productCode=graphene.String(required=True),
+        referenceDate=graphene.Date(required=True)
     )
     # TODO: refactoring
     # Eligibility is calculated for a Policy
@@ -127,9 +128,11 @@ class Query(graphene.ObjectType):
     def resolve_policy_balance(self, info, **kwargs):
         family_id = kwargs.get('familyId')
         product_code = kwargs.get('productCode')
+        reference_date = kwargs.get('referenceDate')
         req = BalanceRequest(
             family_id=family_id,
-            product_code=product_code
+            product_code=product_code,
+            reference_date=reference_date
         )
         res = BalanceService(user=info.context.user).request(req)
         return PolicyBalanceGraphQLType(

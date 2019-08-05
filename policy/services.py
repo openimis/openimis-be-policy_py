@@ -122,9 +122,10 @@ class ByInsureeService(object):
 @core.comparable
 class BalanceRequest(object):
 
-    def __init__(self, family_id, product_code):
+    def __init__(self, family_id, product_code, reference_date):
         self.family_id = family_id
         self.product_code = product_code
+        self.reference_date = reference_date
 
     def __eq__(self, other):
         return isinstance(other, self.__class__) and self.__dict__ == other.__dict__
@@ -154,11 +155,12 @@ class BalanceService(object):
             Q(code=req.product_code),
             *core.utils.filter_validity(())
         )
-        pol = Policy.objects.get(
+        pol = Policy.objects.filter(
             Q(family_id=req.family_id),
             Q(product_id=prod.id),
+            Q(expiry_date__lte=req.reference_date),
             *core.utils.filter_validity(())
-        )
+        ).order_by('-expiry_date')[:1].get()
         premiumsAmountService = ByPolicyPremiumsAmountService(user=self.user)
         premiums_amount = premiumsAmountService.request(pol.id)
         return BalanceResponse(
