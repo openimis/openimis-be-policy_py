@@ -1,12 +1,11 @@
 import graphene
-from graphene_django import DjangoObjectType
-from .models import Policy
-from .services import ByInsureeRequest, ByInsureeResponse, ByInsureeService
-from .services import BalanceRequest, BalanceResponse, BalanceService
+
+from .services import BalanceRequest, BalanceService
+from .services import ByInsureeRequest, ByInsureeService
 from .services import EligibilityRequest, EligibilityService
 
 
-class PolicyByInsureeItemGraphQLType(graphene.ObjectType):
+class PolicyByInsureeItemGQLType(graphene.ObjectType):
     # policy_id = graphene.Int()
     # policy_value = graphene.Float()
     # premiums_amount = graphene.Float()
@@ -22,7 +21,7 @@ class PolicyByInsureeItemGraphQLType(graphene.ObjectType):
     ceiling2 = graphene.Float()
 
 
-class PolicyBalanceGraphQLType(graphene.ObjectType):
+class PolicyBalanceGQLType(graphene.ObjectType):
     family_id = graphene.Int()
     product_code = graphene.String()
     policy_id = graphene.Int()
@@ -31,11 +30,11 @@ class PolicyBalanceGraphQLType(graphene.ObjectType):
     balance = graphene.Float()
 
 
-class PoliciesByInsureeGraphQLType(graphene.ObjectType):
-    items = graphene.List(PolicyByInsureeItemGraphQLType)
+class PoliciesByInsureeGQLType(graphene.ObjectType):
+    items = graphene.List(PolicyByInsureeItemGQLType)
 
 
-class EligibilityGraphQLType(graphene.ObjectType):
+class EligibilityGQLType(graphene.ObjectType):
     prod_id = graphene.String()
     total_admissions_left = graphene.Int()
     total_visits_left = graphene.Int()
@@ -59,16 +58,16 @@ class EligibilityGraphQLType(graphene.ObjectType):
 class Query(graphene.ObjectType):
     # TODO: refactoring
     # A Policy is bound to a Family
-    # ... and should not make the asumption that a Family
+    # ... and should not make the assumption that a Family
     # is made of 'Insurees'
     # This requires to refactor the ByInsureeService
     policies_by_insuree = graphene.Field(
-        PoliciesByInsureeGraphQLType,
+        PoliciesByInsureeGQLType,
         chfId=graphene.String(required=True),
         locationId=graphene.Int()
     )
     policy_balance = graphene.Field(
-        PolicyBalanceGraphQLType,
+        PolicyBalanceGQLType,
         familyId=graphene.Int(required=True),
         productCode=graphene.String(required=True),
         referenceDate=graphene.Date(required=True)
@@ -78,23 +77,23 @@ class Query(graphene.ObjectType):
     # ... which is bound to a Family (not an Insuree)
     # This requires to refactor the EligibilityService
     policy_eligibility_by_insuree = graphene.Field(
-        EligibilityGraphQLType,
+        EligibilityGQLType,
         chfId=graphene.String(required=True)
     )
     policy_item_eligibility_by_insuree = graphene.Field(
-        EligibilityGraphQLType,
+        EligibilityGQLType,
         chfId=graphene.String(required=True),
         itemCode=graphene.String(required=True)
     )
     policy_service_eligibility_by_insuree = graphene.Field(
-        EligibilityGraphQLType,
+        EligibilityGQLType,
         chfId=graphene.String(required=True),
         serviceCode=graphene.String(required=True),
     )
 
     @staticmethod
     def _to_policy_by_insuree_item(item):
-        return PolicyByInsureeItemGraphQLType(
+        return PolicyByInsureeItemGQLType(
             # TODO: return the policy (summary) info
             # Requires to denormalize database for the premiums_amount
             # ---
@@ -120,7 +119,7 @@ class Query(graphene.ObjectType):
             location_id=kwargs.get('locationId') or 0
         )
         res = ByInsureeService(user=info.context.user).request(req)
-        return PoliciesByInsureeGraphQLType(
+        return PoliciesByInsureeGQLType(
             items=tuple(map(
                 lambda x: Query._to_policy_by_insuree_item(x), res.items))
         )
@@ -135,7 +134,7 @@ class Query(graphene.ObjectType):
             reference_date=reference_date
         )
         res = BalanceService(user=info.context.user).request(req)
-        return PolicyBalanceGraphQLType(
+        return PolicyBalanceGQLType(
             family_id=family_id,
             product_code=product_code,
             policy_id=res.policy_id,
@@ -147,7 +146,7 @@ class Query(graphene.ObjectType):
     @staticmethod
     def _resolve_policy_eligibility_by_insuree(user, req):
         res = EligibilityService(user=user).request(req)
-        return EligibilityGraphQLType(
+        return EligibilityGQLType(
             prod_id=res.prod_id,
             total_admissions_left=res.total_admissions_left,
             total_visits_left=res.total_visits_left,
