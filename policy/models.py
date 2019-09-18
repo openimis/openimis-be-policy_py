@@ -38,3 +38,11 @@ class Policy(models.Model):
     class Meta:
         managed = False
         db_table = 'tblPolicy'
+
+    STATUS_IDLE = 1
+    STATUS_ACTIVE = 2
+    STATUS_SUSPENDED = 4
+    STATUS_EXPIRED = 8
+
+    STAGE_NEW = 'N'
+    STAGE_RENEWED = 'R'
