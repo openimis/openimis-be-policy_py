@@ -20,7 +20,7 @@ class Policy(models.Model):
     effective_date = fields.DateField(db_column='EffectiveDate', blank=True, null=True)
     expiry_date = fields.DateField(db_column='ExpiryDate', blank=True, null=True)
 
-    product = models.ForeignKey(Product, models.DO_NOTHING, db_column='ProdID')
+    product = models.ForeignKey(Product, models.DO_NOTHING, db_column='ProdID', related_name="policies")
     # officerid = models.ForeignKey(Tblofficer, models.DO_NOTHING, db_column='OfficerID', blank=True, null=True)
 
     validity_from = fields.DateTimeField(db_column='ValidityFrom')
