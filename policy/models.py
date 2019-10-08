@@ -7,7 +7,7 @@ from product.models import Product
 
 class Policy(models.Model):
     id = models.AutoField(db_column='PolicyID', primary_key=True)
-    uuid = models.UUIDField(db_column='PolicyUUID', default=uuid.uuid4, unique = True)
+    uuid = models.CharField(db_column='PolicyUUID', max_length=36, default=uuid.uuid4, unique = True)
     legacy_id = models.IntegerField(db_column='LegacyID', blank=True, null=True)
 
     stage = models.CharField(db_column='PolicyStage', max_length=1, blank=True, null=True)
