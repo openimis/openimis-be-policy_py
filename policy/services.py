@@ -1,7 +1,6 @@
 from django.db import connection
 from django.db.models import Q
 import xml.etree.ElementTree as ET
-from django.core.exceptions import PermissionDenied
 import re
 from datetime import datetime as py_datetime
 import core
@@ -117,60 +116,6 @@ class ByInsureeService(object):
                 items=items
             )
 
-
-# --- BALANCE ---
-@core.comparable
-class BalanceRequest(object):
-
-    def __init__(self, family_id, product_code, reference_date):
-        self.family_id = family_id
-        self.product_code = product_code
-        self.reference_date = reference_date
-
-    def __eq__(self, other):
-        return isinstance(other, self.__class__) and self.__dict__ == other.__dict__
-
-
-@core.comparable
-class BalanceResponse(object):
-
-    def __init__(self, balance_request, policy_id, policy_value, premiums_amount, balance):
-        self.balance_request = balance_request
-        self.policy_id = policy_id
-        self.policy_value = policy_value
-        self.premiums_amount = premiums_amount
-        self.balance = balance
-
-    def __eq__(self, other):
-        return isinstance(other, self.__class__) and self.__dict__ == other.__dict__
-
-
-class BalanceService(object):
-
-    def __init__(self, user):
-        self.user = user
-
-    def request(self, req):
-        prod = Product.objects.get(
-            Q(code=req.product_code),
-            *core.utils.filter_validity(())
-        )
-        pol = Policy.objects.filter(
-            Q(family_id=req.family_id),
-            Q(product_id=prod.id),
-            Q(expiry_date__lte=req.reference_date),
-            *core.utils.filter_validity(())
-        ).order_by('-expiry_date')[:1].get()
-        premiumsAmountService = ByPolicyPremiumsAmountService(user=self.user)
-        premiums_amount = premiumsAmountService.request(pol.id)
-        return BalanceResponse(
-            balance_request=req,
-            policy_id=pol.id,
-            policy_value=pol.value,
-            premiums_amount=premiums_amount,
-            balance=pol.value - premiums_amount
-        )
-
 # --- ELIGIBILITY --
 # TODO: should become "BY FAMILY":
 # Eligibility is calculated from a Policy
@@ -225,8 +170,6 @@ class EligibilityService(object):
         self.user = user
 
     def request(self, req):
-        if self.user.is_anonymous or not self.user.has_perm('policy.can_view'):
-            raise PermissionDenied
         with connection.cursor() as cur:
             sql = """\
                 DECLARE @MinDateService DATE, @MinDateItem DATE,
