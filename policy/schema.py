@@ -1,8 +1,9 @@
 import graphene
-
-from .services import BalanceRequest, BalanceService
+from django.core.exceptions import PermissionDenied
 from .services import ByInsureeRequest, ByInsureeService
 from .services import EligibilityRequest, EligibilityService
+from .apps import PolicyConfig
+from django.utils.translation import gettext as _
 
 
 class PolicyByInsureeItemGQLType(graphene.ObjectType):
@@ -19,15 +20,6 @@ class PolicyByInsureeItemGQLType(graphene.ObjectType):
     ded2 = graphene.Float()
     ceiling1 = graphene.Float()
     ceiling2 = graphene.Float()
-
-
-class PolicyBalanceGQLType(graphene.ObjectType):
-    family_id = graphene.Int()
-    product_code = graphene.String()
-    policy_id = graphene.Int()
-    policy_value = graphene.Float()
-    premiums_amount = graphene.Float()
-    balance = graphene.Float()
 
 
 class PoliciesByInsureeGQLType(graphene.ObjectType):
@@ -65,12 +57,6 @@ class Query(graphene.ObjectType):
         PoliciesByInsureeGQLType,
         chfId=graphene.String(required=True),
         locationId=graphene.Int()
-    )
-    policy_balance = graphene.Field(
-        PolicyBalanceGQLType,
-        familyId=graphene.Int(required=True),
-        productCode=graphene.String(required=True),
-        referenceDate=graphene.Date(required=True)
     )
     # TODO: refactoring
     # Eligibility is calculated for a Policy
@@ -114,6 +100,8 @@ class Query(graphene.ObjectType):
         )
 
     def resolve_policies_by_insuree(self, info, **kwargs):
+        if not info.context.user.has_perms(PolicyConfig.gql_query_eligibilities_perms):
+            raise PermissionDenied(_("unauthorized"))
         req = ByInsureeRequest(
             chf_id=kwargs.get('chfId'),
             location_id=kwargs.get('locationId') or 0
@@ -122,25 +110,6 @@ class Query(graphene.ObjectType):
         return PoliciesByInsureeGQLType(
             items=tuple(map(
                 lambda x: Query._to_policy_by_insuree_item(x), res.items))
-        )
-
-    def resolve_policy_balance(self, info, **kwargs):
-        family_id = kwargs.get('familyId')
-        product_code = kwargs.get('productCode')
-        reference_date = kwargs.get('referenceDate')
-        req = BalanceRequest(
-            family_id=family_id,
-            product_code=product_code,
-            reference_date=reference_date
-        )
-        res = BalanceService(user=info.context.user).request(req)
-        return PolicyBalanceGQLType(
-            family_id=family_id,
-            product_code=product_code,
-            policy_id=res.policy_id,
-            policy_value=res.policy_value,
-            premiums_amount=res.premiums_amount,
-            balance=res.balance
         )
 
     @staticmethod
@@ -168,6 +137,8 @@ class Query(graphene.ObjectType):
         )
 
     def resolve_policy_eligibility_by_insuree(self, info, **kwargs):
+        if not info.context.user.has_perms(PolicyConfig.gql_query_eligibilities_perms):
+            raise PermissionDenied(_("unauthorized"))
         req = EligibilityRequest(
             chf_id=kwargs.get('chfId')
         )
@@ -177,6 +148,8 @@ class Query(graphene.ObjectType):
         )
 
     def resolve_policy_item_eligibility_by_insuree(self, info, **kwargs):
+        if not info.context.user.has_perms(PolicyConfig.gql_query_eligibilities_perms):
+            raise PermissionDenied(_("unauthorized"))
         req = EligibilityRequest(
             chf_id=kwargs.get('chfId'),
             item_code=kwargs.get('itemCode')
@@ -187,6 +160,8 @@ class Query(graphene.ObjectType):
         )
 
     def resolve_policy_service_eligibility_by_insuree(self, info, **kwargs):
+        if not info.context.user.has_perms(PolicyConfig.gql_query_eligibilities_perms):
+            raise PermissionDenied(_("unauthorized"))
         req = EligibilityRequest(
             chf_id=kwargs.get('chfId'),
             service_code=kwargs.get('serviceCode')
