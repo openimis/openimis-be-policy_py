@@ -1,6 +1,7 @@
 import uuid
 from django.db import models
 from core import fields
+from core.models import Officer
 from insuree.models import Family
 from product.models import Product
 
@@ -21,7 +22,7 @@ class Policy(models.Model):
     expiry_date = fields.DateField(db_column='ExpiryDate', blank=True, null=True)
 
     product = models.ForeignKey(Product, models.DO_NOTHING, db_column='ProdID', related_name="policies")
-    # officerid = models.ForeignKey(Tblofficer, models.DO_NOTHING, db_column='OfficerID', blank=True, null=True)
+    officer = models.ForeignKey(Officer, models.DO_NOTHING, db_column='OfficerID', blank=True, null=True, related_name="policies")
 
     validity_from = fields.DateTimeField(db_column='ValidityFrom')
     validity_to = fields.DateTimeField(db_column='ValidityTo', blank=True, null=True)

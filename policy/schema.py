@@ -100,7 +100,7 @@ class Query(graphene.ObjectType):
         )
 
     def resolve_policies_by_insuree(self, info, **kwargs):
-        if not info.context.user.has_perms(PolicyConfig.gql_query_eligibilities_perms):
+        if not info.context.user.has_perms(PolicyConfig.gql_query_policies_by_insuree_perms):
             raise PermissionDenied(_("unauthorized"))
         req = ByInsureeRequest(
             chf_id=kwargs.get('chfId'),
