@@ -15,11 +15,12 @@ class PolicyByInsureeItemGQLType(graphene.ObjectType):
     product_name = graphene.String()
     expiry_date = graphene.Date()
     status = graphene.String()
-    ded_type = graphene.String()
-    ded1 = graphene.Float()
-    ded2 = graphene.Float()
-    ceiling1 = graphene.Float()
-    ceiling2 = graphene.Float()
+    ded = graphene.Float()
+    ded_in_patient = graphene.Float()
+    ded_out_patient = graphene.Float()
+    ceiling = graphene.Float()
+    ceiling_in_patient = graphene.Float()
+    ceiling_out_patient = graphene.Float()
 
 
 class PoliciesByInsureeGQLType(graphene.ObjectType):
@@ -55,8 +56,7 @@ class Query(graphene.ObjectType):
     # This requires to refactor the ByInsureeService
     policies_by_insuree = graphene.Field(
         PoliciesByInsureeGQLType,
-        chfId=graphene.String(required=True),
-        locationId=graphene.Int()
+        chfId=graphene.String(required=True)
     )
     # TODO: refactoring
     # Eligibility is calculated for a Policy
@@ -92,20 +92,18 @@ class Query(graphene.ObjectType):
             product_name=item.product_name,
             expiry_date=item.expiry_date,
             status=item.status,
-            ded_type=item.ded_type,
-            ded1=item.ded1,
-            ded2=item.ded2,
-            ceiling1=item.ceiling1,
-            ceiling2=item.ceiling2
+            ded=item.ded,
+            ded_in_patient=item.ded_in_patient,
+            ded_out_patient=item.ded_out_patient,
+            ceiling=item.ceiling,
+            ceiling_in_patient=item.ceiling_in_patient,
+            ceiling_out_patient=item.ceiling_out_patient
         )
 
     def resolve_policies_by_insuree(self, info, **kwargs):
         if not info.context.user.has_perms(PolicyConfig.gql_query_policies_by_insuree_perms):
             raise PermissionDenied(_("unauthorized"))
-        req = ByInsureeRequest(
-            chf_id=kwargs.get('chfId'),
-            location_id=kwargs.get('locationId') or 0
-        )
+        req = ByInsureeRequest(chf_id=kwargs.get('chfId'))
         res = ByInsureeService(user=info.context.user).request(req)
         return PoliciesByInsureeGQLType(
             items=tuple(map(

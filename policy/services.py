@@ -17,9 +17,8 @@ from contribution.services import ByPolicyPremiumsAmountService
 @core.comparable
 class ByInsureeRequest(object):
 
-    def __init__(self, chf_id, location_id=0):
+    def __init__(self, chf_id):
         self.chf_id = chf_id
-        self.location_id = location_id
 
     def __eq__(self, other):
         return isinstance(other, self.__class__) and self.__dict__ == other.__dict__
@@ -29,22 +28,17 @@ class ByInsureeRequest(object):
 class ByInsureeResponseItem(object):
 
     def __init__(self, product_code, product_name, expiry_date, status,
-                 ded_type, ded1, ded2, ceiling1, ceiling2):
-        # def __init__(self, policy_id, policy_value, premiums_amount, balance, product_code, product_name, expiry_date, status,
-        #              ded_type, ded1, ded2, ceiling1, ceiling2):
-        # self.policy_id = policy_id
-        # self.policy_value = policy_value
-        # self.premiums_amount = premiums_amount
-        # self.balance = balance
+                 ded, ded_in_patient, ded_out_patient, ceiling, ceiling_in_patient, ceiling_out_patient):
         self.product_code = product_code
         self.product_name = product_name
         self.expiry_date = expiry_date
         self.status = status
-        self.ded_type = ded_type
-        self.ded1 = ded1
-        self.ded2 = ded2
-        self.ceiling1 = ceiling1
-        self.ceiling2 = ceiling2
+        self.ded = ded
+        self.ded_in_patient = ded_in_patient
+        self.ded_out_patient = ded_out_patient
+        self.ceiling = ceiling
+        self.ceiling_in_patient = ceiling_in_patient
+        self.ceiling_out_patient = ceiling_out_patient
 
     def __eq__(self, other):
         return isinstance(other, self.__class__) and self.__dict__ == other.__dict__
@@ -67,38 +61,34 @@ class ByInsureeService(object):
         self.user = user
 
     @staticmethod
-    def _to_item(row):
-        if row[7]:
-            d = re.split('\D', row[7])
-            d.reverse()
-            expiry_date = py_datetime(*[int(x) for x in d])
-        else:
-            expiry_date = None
+    def _to_item(cols, row):
         return ByInsureeResponseItem(
-            # policy_id=None,
-            # policy_value=None,
-            # premiums_amount=None,
-            # balance=None,
-            product_code=row[5],
-            product_name=row[6],
-            expiry_date=expiry_date,
-            status=row[8],
-            ded_type=row[9],
-            ded1=row[10],
-            ded2=row[11],
-            ceiling1=row[12],
-            ceiling2=row[13]
+            product_code=row[7],
+            product_name=row[8],
+            expiry_date=row[6],
+            status=row[5],
+            ded=row[cols.index('Deductable')
+                    ] if 'Deductable' in cols else None,
+            ded_in_patient=row[cols.index(
+                'IP Deductable')] if 'IP Deductable' in cols else None,
+            ded_out_patient=row[cols.index(
+                'OP Deductable')] if 'OP Deductable' in cols else None,
+            ceiling=row[cols.index('Ceiling')] if 'Ceiling' in cols else None,
+            ceiling_in_patient=row[cols.index(
+                'IP Ceiling')] if 'IP Ceiling' in cols else None,
+            ceiling_out_patient=row[cols.index(
+                'OP Ceiling')] if 'OP Ceiling' in cols else None
         )
 
     def request(self, by_insuree_request):
         with connection.cursor() as cur:
             sql = """\
-                EXEC [dbo].[uspPolicyInquiry] @CHFID = %s, @LocationId = %s;
+                EXEC [dbo].[uspPolicyInquiry2] @CHFID = %s;
             """
-            cur.execute(sql, (by_insuree_request.chf_id,
-                              by_insuree_request.location_id))
+            cur.execute(sql, [by_insuree_request.chf_id])
             # stored proc outputs several results (varying from ),
             # we are only interested in the last one
+            cols = [col[0] for col in cur.description]
             next = True
             res = []
             while next:
@@ -109,7 +99,7 @@ class ByInsureeService(object):
                 finally:
                     next = cur.nextset()
             items = tuple(
-                map(lambda x: ByInsureeService._to_item(x), res)
+                map(lambda x: ByInsureeService._to_item(cols, x), res)
             )
             return ByInsureeResponse(
                 by_insuree_request=by_insuree_request,
