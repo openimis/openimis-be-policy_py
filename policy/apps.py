@@ -15,10 +15,8 @@ class PolicyConfig(AppConfig):
     gql_query_eligibilities_perms = []
 
     def _configure_permissions(self, cfg):
-        PolicyConfig.gql_query_policies_by_insuree_perms = cfg[
-            "gql_query_policies_by_insuree_perms"]
-        PolicyConfig.gql_query_eligibilities_perms = cfg[
-            "gql_query_eligibilities_perms"]
+        PolicyConfig.gql_query_policies_by_insuree_perms = cfg["gql_query_policies_by_insuree_perms"]
+        PolicyConfig.gql_query_eligibilities_perms = cfg["gql_query_eligibilities_perms"]
 
     def ready(self):
         from core.models import ModuleConfiguration
