@@ -1,10 +1,8 @@
 from django.test import TestCase
 from django.core.exceptions import PermissionDenied
 from unittest import mock
-import xml.etree.ElementTree as ET
 from .services import *
 import core
-import json
 
 
 class EligibilityServiceTestCase(TestCase):
