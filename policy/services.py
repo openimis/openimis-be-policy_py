@@ -1,44 +1,74 @@
 from django.db import connection
-from django.db.models import Q
+from django.db.models import Q, Sum
 import xml.etree.ElementTree as ET
 import re
 from datetime import datetime as py_datetime
 import core
 from .models import Policy
 from product.models import Product
-from contribution.services import ByPolicyPremiumsAmountService
+from insuree.models import Insuree, Family
 
 
-# --- BY INSUREE ---
-# TODO: should become "BY FAMILY":
-# A Policy is bound to a Family
-# ... and should not make any assumption on what a Family looks like!
-# -------------------
 @core.comparable
 class ByInsureeRequest(object):
 
-    def __init__(self, chf_id):
+    def __init__(self, chf_id, show_historical=False):
         self.chf_id = chf_id
+        self.show_historical = show_historical
 
     def __eq__(self, other):
         return isinstance(other, self.__class__) and self.__dict__ == other.__dict__
 
 
 @core.comparable
-class ByInsureeResponseItem(object):
+class ByFamilyOrInsureeResponseItem(object):
 
-    def __init__(self, product_code, product_name, expiry_date, status,
-                 ded, ded_in_patient, ded_out_patient, ceiling, ceiling_in_patient, ceiling_out_patient):
+    def __init__(self,
+                 policy_id,
+                 policy_uuid,
+                 policy_value,
+                 product_code,
+                 product_name,
+                 start_date,
+                 enroll_date,
+                 effective_date,
+                 expiry_date,
+                 officer_code,
+                 officer_name,
+                 status,
+                 value,
+                 ded,
+                 ded_in_patient,
+                 ded_out_patient,
+                 ceiling,
+                 ceiling_in_patient,
+                 ceiling_out_patient,
+                 balance,
+                 validity_from,
+                 validity_to
+                 ):
+        self.policy_id = policy_id
+        self.policy_uuid = policy_uuid
+        self.policy_value = policy_value
         self.product_code = product_code
         self.product_name = product_name
+        self.start_date = start_date
+        self.enroll_date = enroll_date
+        self.effective_date = effective_date
         self.expiry_date = expiry_date
+        self.officer_code = officer_code
+        self.officer_name = officer_name
         self.status = status
+        self.value = value
         self.ded = ded
         self.ded_in_patient = ded_in_patient
         self.ded_out_patient = ded_out_patient
         self.ceiling = ceiling
         self.ceiling_in_patient = ceiling_in_patient
         self.ceiling_out_patient = ceiling_out_patient
+        self.balance = balance
+        self.validity_from = validity_from
+        self.validity_to = validity_to
 
     def __eq__(self, other):
         return isinstance(other, self.__class__) and self.__dict__ == other.__dict__
@@ -54,57 +84,116 @@ class ByInsureeResponse(object):
     def __eq__(self, other):
         return isinstance(other, self.__class__) and self.__dict__ == other.__dict__
 
-
-class ByInsureeService(object):
+class FilteredPoliciesService(object):
 
     def __init__(self, user):
         self.user = user
 
     @staticmethod
-    def _to_item(cols, row):
-        return ByInsureeResponseItem(
-            product_code=row[7],
-            product_name=row[8],
-            expiry_date=row[6],
-            status=row[5],
-            ded=row[cols.index('Deductable')
-                    ] if 'Deductable' in cols else None,
-            ded_in_patient=row[cols.index(
-                'IP Deductable')] if 'IP Deductable' in cols else None,
-            ded_out_patient=row[cols.index(
-                'OP Deductable')] if 'OP Deductable' in cols else None,
-            ceiling=row[cols.index('Ceiling')] if 'Ceiling' in cols else None,
-            ceiling_in_patient=row[cols.index(
-                'IP Ceiling')] if 'IP Ceiling' in cols else None,
-            ceiling_out_patient=row[cols.index(
-                'OP Ceiling')] if 'OP Ceiling' in cols else None
+    def _to_item(row):
+        return ByFamilyOrInsureeResponseItem(
+            policy_id=row.id,
+            policy_uuid=row.uuid,
+            policy_value=row.value,
+            product_code=row.product.code,
+            product_name=row.product.name,
+            start_date=row.start_date,
+            enroll_date=row.enroll_date,
+            effective_date=row.effective_date,
+            expiry_date=row.expiry_date,
+            officer_code=row.officer.code,
+            officer_name=row.officer.name(),
+            status=row.status,
+            value=row.value,
+            ded=row.total_ded_g,
+            ded_in_patient=row.total_ded_ip,
+            ded_out_patient=row.total_ded_op,
+            ceiling=0,  # TODO: product.xxx
+            ceiling_in_patient=0,  # TODO: product.xxx
+            ceiling_out_patient=0,  # TODO: product.xxx
+            balance=0,  # TODO: nullsafe calculation from value,...
+            validity_from=row.validity_from,
+            validity_to=row.validity_to
         )
 
+    def build_query(self, req):
+        # TODO: prevent direct dependency on claim_ded structure?
+        res = Policy.objects \
+            .select_related('product') \
+            .select_related('officer') \
+            .prefetch_related('claim_ded_rems') \
+            .annotate(total_ded_g=Sum('claim_ded_rems__ded_g')) \
+            .annotate(total_ded_ip=Sum('claim_ded_rems__ded_ip')) \
+            .annotate(total_ded_op=Sum('claim_ded_rems__ded_op')) \
+            .annotate(total_rem_g=Sum('claim_ded_rems__rem_g')) \
+            .annotate(total_rem_op=Sum('claim_ded_rems__rem_op')) \
+            .annotate(total_rem_ip=Sum('claim_ded_rems__rem_ip')) \
+            .annotate(total_rem_consult=Sum('claim_ded_rems__rem_consult')) \
+            .annotate(total_rem_surgery=Sum('claim_ded_rems__rem_surgery')) \
+            .annotate(total_rem_delivery=Sum('claim_ded_rems__rem_delivery')) \
+            .annotate(total_rem_hospitalization=Sum('claim_ded_rems__rem_hospitalization')) \
+            .annotate(total_rem_antenatal=Sum('claim_ded_rems__rem_antenatal'))
+        if not req.show_historical:
+            res = res.filter(*core.filter_validity())
+        return res
+
+class ByInsureeService(FilteredPoliciesService):
+
+    def __init__(self, user):
+        super(ByInsureeService, self).__init__(user)
+
     def request(self, by_insuree_request):
-        with connection.cursor() as cur:
-            sql = """\
-                EXEC [dbo].[uspPolicyInquiry2] @CHFID = %s;
-            """
-            cur.execute(sql, [by_insuree_request.chf_id])
-            # stored proc outputs several results (varying from ),
-            # we are only interested in the last one
-            cols = [col[0] for col in cur.description]
-            next = True
-            res = []
-            while next:
-                try:
-                    res = cur.fetchall()
-                except:
-                    pass
-                finally:
-                    next = cur.nextset()
-            items = tuple(
-                map(lambda x: ByInsureeService._to_item(cols, x), res)
-            )
-            return ByInsureeResponse(
-                by_insuree_request=by_insuree_request,
-                items=items
-            )
+        insuree = Insuree.objects.get(chf_id=by_insuree_request.chf_id, *core.filter_validity())
+        res = self.build_query(by_insuree_request)
+        res = res.prefetch_related('insuree_policies')
+        res = res.filter(insuree_policies__insuree_id=insuree.id)
+        items = tuple(
+            map(lambda x: FilteredPoliciesService._to_item(x), res)
+        )
+        return ByInsureeResponse(
+            by_insuree_request=by_insuree_request,
+            items=items
+        )
+
+
+@core.comparable
+class ByFamilyRequest(object):
+
+    def __init__(self, family_uuid, show_historical=False):
+        self.family_uuid = family_uuid
+        self.show_historical = show_historical
+
+    def __eq__(self, other):
+        return isinstance(other, self.__class__) and self.__dict__ == other.__dict__
+
+
+@core.comparable
+class ByFamilyResponse(object):
+
+    def __init__(self, by_family_request, items):
+        self.by_family_request = by_family_request
+        self.items = items
+
+    def __eq__(self, other):
+        return isinstance(other, self.__class__) and self.__dict__ == other.__dict__
+
+
+class ByFamilyService(FilteredPoliciesService):
+    def __init__(self, user):
+        super(ByFamilyService, self).__init__(user)
+
+    def request(self, by_family_request):
+        family = Family.objects.get(uuid=by_family_request.family_uuid, *core.filter_validity())
+        res = self.build_query(by_family_request)
+        res = res.filter(family_id=family.id)
+        items = tuple(
+            map(lambda x: FilteredPoliciesService._to_item(x), res)
+        )
+        return ByFamilyResponse(
+            by_family_request=by_family_request,
+            items=items
+        )
+
 
 # --- ELIGIBILITY --
 # TODO: should become "BY FAMILY":
@@ -126,8 +215,10 @@ class EligibilityRequest(object):
 @core.comparable
 class EligibilityResponse(object):
 
-    def __init__(self, eligibility_request, prod_id=None, total_admissions_left=0, total_visits_left=0, total_consultations_left=0, total_surgeries_left=0,
-                 total_deliveries_left=0, total_antenatal_left=0, consultation_amount_left=0, surgery_amount_left=0, delivery_amount_left=0,
+    def __init__(self, eligibility_request, prod_id=None, total_admissions_left=0, total_visits_left=0,
+                 total_consultations_left=0, total_surgeries_left=0,
+                 total_deliveries_left=0, total_antenatal_left=0, consultation_amount_left=0, surgery_amount_left=0,
+                 delivery_amount_left=0,
                  hospitalization_amount_left=0, antenatal_amount_left=0,
                  min_date_service=None, min_date_item=None, service_left=0, item_left=0, is_item_ok=0, is_service_ok=0):
         self.eligibility_request = eligibility_request
@@ -179,7 +270,8 @@ class EligibilityService(object):
                 return EligibilityResponse(eligibility_request=req)
 
             (prod_id, total_admissions_left, total_visits_left, total_consultations_left, total_surgeries_left,
-             total_deliveries_left, total_antenatal_left, consultation_amount_left, surgery_amount_left, delivery_amount_left,
+             total_deliveries_left, total_antenatal_left, consultation_amount_left, surgery_amount_left,
+             delivery_amount_left,
              hospitalization_amount_left, antenatal_amount_left) = res
             cur.nextset()
             (min_date_service, min_date_item, service_left,
