@@ -61,34 +61,37 @@ class ByInsureeService(object):
         self.user = user
 
     @staticmethod
-    def _to_item(cols, row):
+    def _to_date(date_str):
+        # db value is always gregorian... and storedproc returns a dd/MM/yyyy string ^^
+        if not date_str:
+            return None
+        (d, m, y) = [int(i) for i in date_str.split('/')]
+        from core import datetime as core_datetime
+        return core_datetime.datetime.from_ad_date(core_datetime.datetime(y, m, d))
+
+    @staticmethod
+    def _to_item(row):
         return ByInsureeResponseItem(
-            product_code=row[7],
-            product_name=row[8],
-            expiry_date=row[6],
-            status=row[5],
-            ded=row[cols.index('Deductable')
-                    ] if 'Deductable' in cols else None,
-            ded_in_patient=row[cols.index(
-                'IP Deductable')] if 'IP Deductable' in cols else None,
-            ded_out_patient=row[cols.index(
-                'OP Deductable')] if 'OP Deductable' in cols else None,
-            ceiling=row[cols.index('Ceiling')] if 'Ceiling' in cols else None,
-            ceiling_in_patient=row[cols.index(
-                'IP Ceiling')] if 'IP Ceiling' in cols else None,
-            ceiling_out_patient=row[cols.index(
-                'OP Ceiling')] if 'OP Ceiling' in cols else None
+            product_code=row[5],
+            product_name=row[6],
+            expiry_date=ByInsureeService._to_date(row[7]),
+            status=row[8],
+            ded=(row[10] if row[10] else 0) + (row[11] if row[11] else 0),
+            ded_in_patient=row[10] if row[10] else 0,
+            ded_out_patient=row[11] if row[11] else 0,
+            ceiling=(row[12] if row[12] else 0) + (row[13] if row[13] else 0),
+            ceiling_in_patient=row[12] if row[12] else 0,
+            ceiling_out_patient=row[13] if row[13] else 0
         )
 
     def request(self, by_insuree_request):
         with connection.cursor() as cur:
             sql = """\
-                EXEC [dbo].[uspPolicyInquiry2] @CHFID = %s;
+                EXEC [dbo].[uspPolicyInquiry] @CHFID = %s;
             """
             cur.execute(sql, [by_insuree_request.chf_id])
             # stored proc outputs several results (varying from ),
             # we are only interested in the last one
-            cols = [col[0] for col in cur.description]
             next = True
             res = []
             while next:
@@ -99,7 +102,7 @@ class ByInsureeService(object):
                 finally:
                     next = cur.nextset()
             items = tuple(
-                map(lambda x: ByInsureeService._to_item(cols, x), res)
+                map(lambda x: ByInsureeService._to_item(x), res)
             )
             return ByInsureeResponse(
                 by_insuree_request=by_insuree_request,
