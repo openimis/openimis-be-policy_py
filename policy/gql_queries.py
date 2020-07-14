@@ -27,7 +27,6 @@ class PolicyByFamilyOrInsureeGQLType(graphene.ObjectType):
     officer_code = graphene.String()
     officer_name = graphene.String()
     status = graphene.String()
-    value = graphene.Float()
     ded = graphene.Float()
     ded_in_patient = graphene.Float()
     ded_out_patient = graphene.Float()

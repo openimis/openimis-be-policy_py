@@ -36,7 +36,6 @@ class ByFamilyOrInsureeResponseItem(object):
                  officer_code,
                  officer_name,
                  status,
-                 value,
                  ded,
                  ded_in_patient,
                  ded_out_patient,
@@ -59,7 +58,6 @@ class ByFamilyOrInsureeResponseItem(object):
         self.officer_code = officer_code
         self.officer_name = officer_name
         self.status = status
-        self.value = value
         self.ded = ded
         self.ded_in_patient = ded_in_patient
         self.ded_out_patient = ded_out_patient
@@ -104,7 +102,6 @@ class FilteredPoliciesService(object):
             officer_code=row.officer.code,
             officer_name=row.officer.name(),
             status=row.status,
-            value=row.value,
             ded=row.total_ded_g,
             ded_in_patient=row.total_ded_ip,
             ded_out_patient=row.total_ded_op,

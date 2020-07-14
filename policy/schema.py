@@ -10,6 +10,7 @@ from django.utils.translation import gettext as _
 from .gql_queries import *  # lgtm [py/polluting-import]
 from .gql_mutations import *  # lgtm [py/polluting-import]
 
+
 class Query(graphene.ObjectType):
     # Note:
     # A Policy is bound to a Family...
@@ -45,6 +46,9 @@ class Query(graphene.ObjectType):
     @staticmethod
     def _to_policy_by_family_or_insuree_item(item):
         return PolicyByFamilyOrInsureeGQLType(
+            policy_id=item.policy_id,
+            policy_uuid=item.policy_uuid,
+            policy_value=item.policy_value,
             product_code=item.product_code,
             product_name=item.product_name,
             start_date=item.start_date,
@@ -54,7 +58,6 @@ class Query(graphene.ObjectType):
             officer_code=item.officer_code,
             officer_name=item.officer_name,
             status=item.status,
-            value=item.value,
             ded=item.ded,
             ded_in_patient=item.ded_in_patient,
             ded_out_patient=item.ded_out_patient,
