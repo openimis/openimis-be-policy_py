@@ -1,4 +1,18 @@
 import graphene
+from graphene_django import DjangoObjectType
+from .models import Policy
+from core import prefix_filterset, filter_validity, ExtendedConnection
+
+
+class PolicyGQLType(DjangoObjectType):
+    class Meta:
+        model = Policy
+        interfaces = (graphene.relay.Node,)
+        filter_fields = {
+            "uuid": ["exact"],
+        }
+        connection_class = ExtendedConnection
+
 
 class PolicyByFamilyOrInsureeGQLType(graphene.ObjectType):
     policy_id = graphene.Int()
