@@ -16,12 +16,12 @@ class Query(graphene.ObjectType):
     # A Policy is bound to a Family...
     # but an insuree of the family is only covered by the family policy
     # if there is a (valid) InsureePolicy
-    policies_by_insuree = graphene.Field(
-        PoliciesByFamilyOrInsureeGQLType,
+    policies_by_insuree = graphene.relay.ConnectionField(
+        PolicyByFamilyOrInsureeConnection,
         chf_id=graphene.String(required=True)
     )
-    policies_by_family = graphene.Field(
-        PoliciesByFamilyOrInsureeGQLType,
+    policies_by_family = graphene.relay.ConnectionField(
+        PolicyByFamilyOrInsureeConnection,
         family_uuid=graphene.String(required=True)
     )
     # TODO: refactoring
@@ -72,22 +72,16 @@ class Query(graphene.ObjectType):
     def resolve_policies_by_insuree(self, info, **kwargs):
         if not info.context.user.has_perms(PolicyConfig.gql_query_policies_by_insuree_perms):
             raise PermissionDenied(_("unauthorized"))
-        req = ByInsureeRequest(chf_id=kwargs.get('chfId'))
+        req = ByInsureeRequest(chf_id=kwargs.get('chf_id'))
         res = ByInsureeService(user=info.context.user).request(req)
-        return PoliciesByFamilyOrInsureeGQLType(
-            items=tuple(map(
-                lambda x: Query._to_policy_by_family_or_insuree_item(x), res.items))
-        )
+        return [Query._to_policy_by_family_or_insuree_item(x) for x in res.items]
 
     def resolve_policies_by_family(self, info, **kwargs):
         if not info.context.user.has_perms(PolicyConfig.gql_query_policies_by_family_perms):
             raise PermissionDenied(_("unauthorized"))
         req = ByFamilyRequest(family_uuid=kwargs.get('family_uuid'))
         res = ByFamilyService(user=info.context.user).request(req)
-        return PoliciesByFamilyOrInsureeGQLType(
-            items=tuple(map(
-                lambda x: Query._to_policy_by_family_or_insuree_item(x), res.items))
-        )
+        return [Query._to_policy_by_family_or_insuree_item(x) for x in res.items]
 
     @staticmethod
     def _resolve_policy_eligibility_by_insuree(user, req):

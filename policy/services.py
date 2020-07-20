@@ -183,6 +183,8 @@ class ByFamilyService(FilteredPoliciesService):
         family = Family.objects.get(uuid=by_family_request.family_uuid, *core.filter_validity())
         res = self.build_query(by_family_request)
         res = res.filter(family_id=family.id)
+        # used with pagination, ordering is mandatory...
+        res = res.order_by('-start_date', '-expiry_date')
         items = tuple(
             map(lambda x: FilteredPoliciesService._to_item(x), res)
         )

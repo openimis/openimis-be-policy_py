@@ -1,7 +1,7 @@
 import graphene
 from graphene_django import DjangoObjectType
 from .models import Policy
-from core import prefix_filterset, filter_validity, ExtendedConnection
+from core import prefix_filterset, filter_validity, ExtendedConnection, ExtendedRelayConnection
 
 
 class PolicyGQLType(DjangoObjectType):
@@ -15,6 +15,9 @@ class PolicyGQLType(DjangoObjectType):
 
 
 class PolicyByFamilyOrInsureeGQLType(graphene.ObjectType):
+    class Meta:
+        interfaces = (graphene.relay.Node,)
+
     policy_id = graphene.Int()
     policy_uuid = graphene.String()
     policy_value = graphene.Float()
@@ -38,8 +41,9 @@ class PolicyByFamilyOrInsureeGQLType(graphene.ObjectType):
     validity_to = graphene.Date()
 
 
-class PoliciesByFamilyOrInsureeGQLType(graphene.ObjectType):
-    items = graphene.List(PolicyByFamilyOrInsureeGQLType)
+class PolicyByFamilyOrInsureeConnection(ExtendedRelayConnection):
+    class Meta:
+        node = PolicyByFamilyOrInsureeGQLType
 
 
 class EligibilityGQLType(graphene.ObjectType):
