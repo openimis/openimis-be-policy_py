@@ -1,14 +1,22 @@
+from dataclasses import dataclass
+
+from core.apps import CoreConfig
 from django.db import connection
-from django.db.models import Q, Sum, Value
+from django.db.models import Sum
 from django.db.models.functions import Coalesce
 from graphene.utils.str_converters import to_snake_case
-import xml.etree.ElementTree as ET
-import re
 from datetime import datetime as py_datetime
-import core
-from .models import Policy
-from product.models import Product
 from insuree.models import Insuree, Family
+from django.db.models import Q
+import core
+from django.template import Template, Context
+from insuree.models import Photo
+from policy.apps import PolicyConfig
+
+from .models import Policy, PolicyRenewal, PolicyRenewalDetail
+import logging
+
+logger = logging.getLogger(__name__)
 
 
 @core.comparable
@@ -327,6 +335,210 @@ class EligibilityService(object):
                 min_date_item=min_date_item,
                 service_left=service_left or 0,
                 item_left=item_left or 0,
-                is_item_ok=is_item_ok == True,
-                is_service_ok=is_service_ok == True
+                is_item_ok=is_item_ok is True,
+                is_service_ok=is_service_ok is True
             )
+
+
+def insert_renewals(date_from=None, date_to=None, officer_id=None, reminding_interval=None, location_id=None, location_levels=4):
+    if reminding_interval is None:
+        reminding_interval = PolicyConfig.policy_renewal_interval
+    from core import datetime
+    now = datetime.datetime.now()
+    policies = Policy.objects.filter(
+        status__in=[Policy.STATUS_EXPIRED, Policy.STATUS_ACTIVE],
+        validity_to__isnull=True,
+    )
+    if reminding_interval:
+        policies = policies.filter(expiry_date__lte=now + core.datetimedelta(days=reminding_interval))
+    if location_id:
+        # TODO support the various levels
+        policies = policies.filter(
+            Q(family__location_id=location_id)  # Village
+            | Q(family__location__parent_id=location_id)  # Ward
+            | Q(family__location__parent__parent_id=location_id)  # District
+            | Q(family__location__parent__parent__parent_id=location_id)  # Region
+        )
+    if officer_id:
+        policies = policies.filter(officer_id=officer_id)
+    if date_from:
+        policies = policies.filter(expiry_date__gte=date_from)
+    if date_to:
+        policies = policies.filter(expiry_date__lte=date_to)
+
+    policies = policies.prefetch_related("product")
+
+    for policy in policies:
+        renewal_warning = 0
+        renewal_date = policy.expiry_date + core.datetimedelta(days=1)
+        product = policy.product  # will be updated if there is a conversion product
+        officer = policy.officer
+        # Get product code or substitution
+        if not product.conversion_product_id:
+            previous_products = []
+            # Could also add a len(previous_products) < 20 but this avoids loops in the conversion_products
+            while product not in previous_products and product.conversion_product:
+                previous_products.append(product)
+                product = product.conversion_product
+            if product in previous_products:
+                logger.error("The product %s has a substitution chain with a loop: %s, continuing with %s",
+                             policy.product_id, [p.id for p in previous_products], product.id)
+
+        # TODO allow this kind of comparison where the left side is a datetime
+        # if datetime.datetime(product.date_from) <= renewal_date <= product.date_to:
+        # noinspection PyChainedComparisons
+        if renewal_date >= product.date_from and renewal_date <= product.date_to:
+            renewal_warning |= 1
+
+        # This is from the original code but is actually not possible as we have an inner join on it
+        if not policy.officer_id:
+            renewal_warning |= 2
+        else:
+            if officer:
+                previous_officers = []
+                while officer not in previous_officers and officer.substitution_officer:
+                    previous_officers.append(officer)
+                    officer = officer.substitution_officer
+                if officer in previous_officers:
+                    logger.error("The product %s has a substitution chain with a loop: %s, continuing with %s",
+                                 policy.officer_id, [o.id for o in previous_officers], officer.id)
+            if officer.works_to and renewal_date > officer.works_to:
+                renewal_warning |= 4
+
+        # Check if the policy has another following policy
+        following_policies = Policy.objects.filter(family_id=policy.family_id)\
+            .filter(Q(product_id=policy.product_id) | Q(product_id=product.id))\
+            .filter(start_date__gte=renewal_date)
+        if not following_policies.first():
+            policy_renewal, policy_renewal_created = PolicyRenewal.objects.get_or_create(
+                policy=policy,
+                validity_to=None,
+                defaults=dict(
+                    renewal_prompt_date=now,
+                    renewal_date=renewal_date,
+                    new_officer=officer,
+                    phone_number=officer.phone,
+                    sms_status=0,
+                    insuree=policy.family.head_insuree,
+                    policy=policy,
+                    new_product=product,
+                    renewal_warnings=renewal_warning,
+                    validity_from=now,
+                    audit_user_id=0,
+                )
+            )
+            if policy_renewal_created:
+                adult_birth_date = now - core.datetimedelta(years=CoreConfig.age_of_majority)
+                photo_renewal_date_adult = now - core.datetimedelta(months=PolicyConfig.policy_renewal_photo_age_adult)  #60
+                photo_renewal_date_child = now - core.datetimedelta(months=PolicyConfig.policy_renewal_photo_age_child)  #12
+                photos_to_renew = Photo.objects.filter(insuree__family=policy.family)\
+                    .filter(insuree__validity_to__isnull=True)\
+                    .filter(Q(insuree__photo_date__isnull=True)
+                            | Q(insuree__photo_date__lte=photo_renewal_date_adult)
+                            | (Q(insuree__photo_date__lte=photo_renewal_date_child)
+                               & Q(insuree__dob__gt=adult_birth_date)
+                               )
+                            )
+                for photo in photos_to_renew:
+                    detail, detail_created = PolicyRenewalDetail.objects.get_or_create(
+                        policy_renewal=policy_renewal,
+                        insuree_id=photo.insuree_id,
+                        validity_from=now,
+                        audit_user_id=0,
+                    )
+                    logger.debug("Photo due for renewal for insuree %s, renewal detail %s, created an entry ? %s",
+                                 photo.insuree_id, detail.id, detail_created)
+
+
+def update_renewals():
+    from core import datetime
+    now = datetime.datetime.now()
+    updated_policies = Policy.objects.filter(validity_to__isnull=True, expiry_date__lt=now) \
+        .update(status=Policy.STATUS_EXPIRED)
+    logger.debug("update_renewals set %s policies to expired status", updated_policies)
+    return updated_policies
+
+
+@dataclass
+class SmsQueueItem:
+    index: int
+    phone: str
+    sms_message: str
+
+
+def policy_renewal_sms(family_message_template, range_from=None, range_to=None, sms_header_template=None):
+    if sms_header_template is None:
+        sms_header_template = """--Renewal--
+{{renewal.renewal_date}}
+{{renewal.insuree.chf_id}}
+{{renewal.last_name}} {{renewal.other_names}}
+{{district_name}}
+{{ward_name}}
+{{village_name}}
+{{renewal.new_product.code}}-{{renewal.new_product.name}}
+"""
+    sms_header = Template(sms_header_template)
+    family_message = Template(family_message_template)
+    from core import datetime
+    now = datetime.datetime.now()
+    sms_queue = []
+    i_count = 0  # TODO: remove and make this method a generator
+
+    if not range_from:
+        range_from = now
+    if not range_to:
+        range_to = now
+
+    renewals = PolicyRenewal.objects.filter(phone_number__isnull=False)\
+        .filter(renewal_prompt_date__gte=range_from)\
+        .filter(renewal_prompt_date__lte=range_to)\
+        .prefetch_related("insuree")\
+        .prefetch_related("new_officer")\
+        .prefetch_related("new_product")
+
+    for renewal in renewals.prefetch_related("insuree"):
+        head_photo_renewal = False
+        sms_photos = ""
+
+        # first get the photo renewal string
+        for detail in renewal.details.filter(validity_to__isnull=True):
+            if detail.insuree.chf_id == renewal.insuree.chf_id:  # not sure it's equivalent to checking the id
+                head_photo_renewal = True
+            else:
+                sms_photos += f"\n{detail.insuree.chf_id}\n{detail.insuree.last_name} {detail.insuree.other_names}"
+        if len(sms_photos) > 0 or head_photo_renewal:
+            head_text = "\nHOF" if head_photo_renewal else ""
+            sms_photos += f"--Photos--{head_text}{sms_photos}"
+
+        village = renewal.policy.family.location
+        # TODO format renewal_date in local format, original SMS is DD/MM/YYYY
+        sms_header_context = Context(dict(
+            renewal=renewal,
+            district_name=village.parent.parent if village and village.parent else None,
+            ward_name=village.parent if village else None,
+            village_name=village,
+        ))
+        sms_header_text = sms_header.render(sms_header_context)
+        sms_message = sms_header_text + "\n" + sms_photos
+
+        if renewal.new_officer.phone_communication:
+            sms_queue.append(SmsQueueItem(i_count, renewal.new_officer.phone, sms_message))
+            i_count += 1
+
+        # Create SMS for the family
+        if family_message and renewal.insuree.phone:
+            expiry_date = renewal.renewal_date - core.datetimedelta(days=1)
+            new_family_message = family_message.render(Context(dict(
+                insuree=renewal.insuree,
+                renewal=renewal,
+                expiry_date=expiry_date,
+            )))
+            #new_family_message = "" # REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(@FamilyMessage, '@@InsuranceID', @CHFID), '@@LastName', @InsLastName),
+            # '@@OtherNames', @InsOtherNames), '@@ProductCode', @ProductCode), '@@ProductName', @ProductName),
+            # '@@ExpiryDate', FORMAT(@ExpiryDate,'dd MMM yyyy'))
+
+            if new_family_message:
+                sms_queue.append(SmsQueueItem(i_count, renewal.insuree.phone, new_family_message))
+                i_count += 1
+
+    return sms_queue
