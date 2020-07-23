@@ -18,11 +18,17 @@ class Query(graphene.ObjectType):
     # if there is a (valid) InsureePolicy
     policies_by_insuree = graphene.relay.ConnectionField(
         PolicyByFamilyOrInsureeConnection,
-        chf_id=graphene.String(required=True)
+        chf_id=graphene.String(required=True),
+        active_or_last_expired_only=graphene.Boolean(),
+        show_history=graphene.Boolean(),
+        order_by=graphene.String(),
     )
     policies_by_family = graphene.relay.ConnectionField(
         PolicyByFamilyOrInsureeConnection,
-        family_uuid=graphene.String(required=True)
+        family_uuid=graphene.String(required=True),
+        active_or_last_expired_only=graphene.Boolean(),
+        show_history=graphene.Boolean(),
+        order_by=graphene.String(),
     )
     # TODO: refactoring
     # Eligibility is calculated for a Policy... which is bound to a Family (not an Insuree)
@@ -72,14 +78,24 @@ class Query(graphene.ObjectType):
     def resolve_policies_by_insuree(self, info, **kwargs):
         if not info.context.user.has_perms(PolicyConfig.gql_query_policies_by_insuree_perms):
             raise PermissionDenied(_("unauthorized"))
-        req = ByInsureeRequest(chf_id=kwargs.get('chf_id'))
+        req = ByInsureeRequest(
+            chf_id=kwargs.get('chf_id'),
+            active_or_last_expired_only=kwargs.get('active_or_last_expired_only', False),
+            show_history=kwargs.get('show_history', False),
+            order_by=kwargs.get('order_by', None)
+        )
         res = ByInsureeService(user=info.context.user).request(req)
         return [Query._to_policy_by_family_or_insuree_item(x) for x in res.items]
 
     def resolve_policies_by_family(self, info, **kwargs):
         if not info.context.user.has_perms(PolicyConfig.gql_query_policies_by_family_perms):
             raise PermissionDenied(_("unauthorized"))
-        req = ByFamilyRequest(family_uuid=kwargs.get('family_uuid'))
+        req = ByFamilyRequest(
+            family_uuid=kwargs.get('family_uuid'),
+            active_or_last_expired_only=kwargs.get('active_or_last_expired_only', False),
+            show_history=kwargs.get('show_history', False),
+            order_by=kwargs.get('order_by', None)
+        )
         res = ByFamilyService(user=info.context.user).request(req)
         return [Query._to_policy_by_family_or_insuree_item(x) for x in res.items]
 

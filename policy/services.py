@@ -1,5 +1,7 @@
 from django.db import connection
-from django.db.models import Q, Sum
+from django.db.models import Q, Sum, Value
+from django.db.models.functions import Coalesce
+from graphene.utils.str_converters import to_snake_case
 import xml.etree.ElementTree as ET
 import re
 from datetime import datetime as py_datetime
@@ -12,9 +14,11 @@ from insuree.models import Insuree, Family
 @core.comparable
 class ByInsureeRequest(object):
 
-    def __init__(self, chf_id, show_historical=False):
+    def __init__(self, chf_id, active_or_last_expired_only=False, show_history=False, order_by=None):
         self.chf_id = chf_id
-        self.show_historical = show_historical
+        self.active_or_last_expired_only = active_or_last_expired_only
+        self.show_history = show_history
+        self.order_by = order_by
 
     def __eq__(self, other):
         return isinstance(other, self.__class__) and self.__dict__ == other.__dict__
@@ -130,8 +134,13 @@ class FilteredPoliciesService(object):
             .annotate(total_rem_delivery=Sum('claim_ded_rems__rem_delivery')) \
             .annotate(total_rem_hospitalization=Sum('claim_ded_rems__rem_hospitalization')) \
             .annotate(total_rem_antenatal=Sum('claim_ded_rems__rem_antenatal'))
-        if not req.show_historical:
+        if not req.show_history:
             res = res.filter(*core.filter_validity())
+        if req.active_or_last_expired_only:
+            # sort on status, so that any active policy (status = 2) pops up...
+            res = res.annotate(not_null_expiry_date=Coalesce('expiry_date', py_datetime.max)) \
+                .annotate(not_null_validity_to=Coalesce('validity_to', py_datetime.max)) \
+                .order_by('product__code', 'status', '-not_null_expiry_date', '-not_null_validity_to', '-validity_from')
         return res
 
 class ByInsureeService(FilteredPoliciesService):
@@ -140,13 +149,31 @@ class ByInsureeService(FilteredPoliciesService):
         super(ByInsureeService, self).__init__(user)
 
     def request(self, by_insuree_request):
-        insuree = Insuree.objects.get(chf_id=by_insuree_request.chf_id, *core.filter_validity())
+        insurees = Insuree.objects.filter(
+            chf_id=by_insuree_request.chf_id,
+            *core.filter_validity() if not by_insuree_request.show_history else []
+        )
         res = self.build_query(by_insuree_request)
         res = res.prefetch_related('insuree_policies')
-        res = res.filter(insuree_policies__insuree_id=insuree.id)
+        res = res.filter(insuree_policies__insuree__in=insurees)
+        # .distinct('product__code') >> DISTINCT ON fields not supported by MS-SQL
+        if by_insuree_request.active_or_last_expired_only:
+            products = {}
+            for r in res:
+                if r.product.code not in products.keys():
+                    products[r.product.code] = r
+            res = products.values()
         items = tuple(
             map(lambda x: FilteredPoliciesService._to_item(x), res)
         )
+        # possible improvement: sort via the ORM
+        # ... but beware of the active_or_last_expired_only filtering!
+        order_attr = to_snake_case(by_insuree_request.order_by if by_insuree_request.order_by else "expiry_date")
+        desc = False
+        if order_attr.startswith('-'):
+            order_attr = order_attr[1:]
+            desc = True
+        items = sorted(items, key=lambda x: getattr(x, order_attr), reverse=desc)
         return ByInsureeResponse(
             by_insuree_request=by_insuree_request,
             items=items
@@ -156,9 +183,11 @@ class ByInsureeService(FilteredPoliciesService):
 @core.comparable
 class ByFamilyRequest(object):
 
-    def __init__(self, family_uuid, show_historical=False):
+    def __init__(self, family_uuid, active_or_last_expired_only=False, show_history=False, order_by=None):
         self.family_uuid = family_uuid
-        self.show_historical = show_historical
+        self.active_or_last_expired_only = active_or_last_expired_only
+        self.show_history = show_history
+        self.order_by = order_by
 
     def __eq__(self, other):
         return isinstance(other, self.__class__) and self.__dict__ == other.__dict__
@@ -183,8 +212,13 @@ class ByFamilyService(FilteredPoliciesService):
         family = Family.objects.get(uuid=by_family_request.family_uuid, *core.filter_validity())
         res = self.build_query(by_family_request)
         res = res.filter(family_id=family.id)
-        # used with pagination, ordering is mandatory...
-        res = res.order_by('-start_date', '-expiry_date')
+        # .distinct('product__code') >> DISTINCT ON fields not supported by MS-SQL
+        if by_family_request.active_or_last_expired_only:
+            products = {}
+            for r in res:
+                if r.product.code not in products.keys():
+                    products[r.product.code] = r
+            res = products.values()
         items = tuple(
             map(lambda x: FilteredPoliciesService._to_item(x), res)
         )
