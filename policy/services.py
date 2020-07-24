@@ -209,7 +209,7 @@ class ByFamilyService(FilteredPoliciesService):
         super(ByFamilyService, self).__init__(user)
 
     def request(self, by_family_request):
-        family = Family.objects.get(uuid=by_family_request.family_uuid, *core.filter_validity())
+        family = Family.objects.get(uuid=by_family_request.family_uuid)
         res = self.build_query(by_family_request)
         res = res.filter(family_id=family.id)
         # .distinct('product__code') >> DISTINCT ON fields not supported by MS-SQL
