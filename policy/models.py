@@ -88,18 +88,3 @@ class PolicyRenewal(core_models.VersionedModel):
     class Meta:
         managed = False
         db_table = 'tblPolicyRenewals'
-
-
-class PolicyRenewalDetail(core_models.VersionedModel):
-    id = models.AutoField(db_column='RenewalDetailID', primary_key=True)
-
-    insuree = models.ForeignKey('insuree.Insuree', models.DO_NOTHING, db_column='InsureeID',
-                                related_name='policy_renewal_details')
-    policy_renewal = models.ForeignKey(PolicyRenewal, models.DO_NOTHING, db_column='RenewalID',
-                                       related_name='details')
-
-    audit_user_id = models.IntegerField(db_column='AuditCreateUser', null=True, blank=True)
-
-    class Meta:
-        managed = False
-        db_table = 'tblPolicyRenewalDetails'

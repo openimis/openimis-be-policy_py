@@ -10,10 +10,10 @@ from insuree.models import Insuree, Family
 from django.db.models import Q
 import core
 from django.template import Template, Context
-from insuree.models import Photo
+from insuree.services import create_insuree_renewal_detail
 from policy.apps import PolicyConfig
 
-from .models import Policy, PolicyRenewal, PolicyRenewalDetail
+from .models import Policy, PolicyRenewal
 import logging
 
 logger = logging.getLogger(__name__)
@@ -428,26 +428,7 @@ def insert_renewals(date_from=None, date_to=None, officer_id=None, reminding_int
                 )
             )
             if policy_renewal_created:
-                adult_birth_date = now - core.datetimedelta(years=CoreConfig.age_of_majority)
-                photo_renewal_date_adult = now - core.datetimedelta(months=PolicyConfig.policy_renewal_photo_age_adult)  #60
-                photo_renewal_date_child = now - core.datetimedelta(months=PolicyConfig.policy_renewal_photo_age_child)  #12
-                photos_to_renew = Photo.objects.filter(insuree__family=policy.family)\
-                    .filter(insuree__validity_to__isnull=True)\
-                    .filter(Q(insuree__photo_date__isnull=True)
-                            | Q(insuree__photo_date__lte=photo_renewal_date_adult)
-                            | (Q(insuree__photo_date__lte=photo_renewal_date_child)
-                               & Q(insuree__dob__gt=adult_birth_date)
-                               )
-                            )
-                for photo in photos_to_renew:
-                    detail, detail_created = PolicyRenewalDetail.objects.get_or_create(
-                        policy_renewal=policy_renewal,
-                        insuree_id=photo.insuree_id,
-                        validity_from=now,
-                        audit_user_id=0,
-                    )
-                    logger.debug("Photo due for renewal for insuree %s, renewal detail %s, created an entry ? %s",
-                                 photo.insuree_id, detail.id, detail_created)
+                create_insuree_renewal_detail(policy_renewal)  # The insuree module can create additional renewal data
 
 
 def update_renewals():
@@ -472,10 +453,15 @@ def policy_renewal_sms(family_message_template, range_from=None, range_to=None, 
 {{renewal.renewal_date}}
 {{renewal.insuree.chf_id}}
 {{renewal.last_name}} {{renewal.other_names}}
-{{district_name}}
-{{ward_name}}
-{{village_name}}
+{{district_name|default_if_none:"district?"}}
+{{ward_name|default_if_none:"ward?"}}
+{{village_name|default_if_none:"village?"}}
 {{renewal.new_product.code}}-{{renewal.new_product.name}}
+{% for detail in renewal.details.all %}{% if detail.insuree.is_head_of_family %}
+HOF{% endif %}
+{{detail.insuree.chf_id}}
+{{detail.insuree.last_name}} {{detail.insuree.other_names}}
+{% endfor %}
 """
     sms_header = Template(sms_header_template)
     family_message = Template(family_message_template)
@@ -494,24 +480,25 @@ def policy_renewal_sms(family_message_template, range_from=None, range_to=None, 
         .filter(renewal_prompt_date__lte=range_to)\
         .prefetch_related("insuree")\
         .prefetch_related("new_officer")\
-        .prefetch_related("new_product")
+        .prefetch_related("new_product")\
+        .prefetch_related("details")\
+        .prefetch_related("details__insuree")
 
-    for renewal in renewals.prefetch_related("insuree"):
-        head_photo_renewal = False
-        sms_photos = ""
-
+    for renewal in renewals:
+        # Leaving the original code in comment to show it used to be handled. It is now delegated to the Django
+        # template for the SMS, we just provide the list of renewal details
+        #
         # first get the photo renewal string
-        for detail in renewal.details.filter(validity_to__isnull=True):
-            if detail.insuree.chf_id == renewal.insuree.chf_id:  # not sure it's equivalent to checking the id
-                head_photo_renewal = True
-            else:
-                sms_photos += f"\n{detail.insuree.chf_id}\n{detail.insuree.last_name} {detail.insuree.other_names}"
-        if len(sms_photos) > 0 or head_photo_renewal:
-            head_text = "\nHOF" if head_photo_renewal else ""
-            sms_photos += f"--Photos--{head_text}{sms_photos}"
+        # for detail in renewal.details.filter(validity_to__isnull=True):
+        #     if detail.insuree.chf_id == renewal.insuree.chf_id:  # not sure it's equivalent to checking the id
+        #         head_photo_renewal = True
+        #     else:
+        #         sms_photos += f"\n{detail.insuree.chf_id}\n{detail.insuree.last_name} {detail.insuree.other_names}"
+        # if len(sms_photos) > 0 or head_photo_renewal:
+        #     head_text = "\nHOF" if head_photo_renewal else ""
+        #     sms_photos += f"--Photos--{head_text}{sms_photos}" # added to sms_header
 
         village = renewal.policy.family.location
-        # TODO format renewal_date in local format, original SMS is DD/MM/YYYY
         sms_header_context = Context(dict(
             renewal=renewal,
             district_name=village.parent.parent if village and village.parent else None,
@@ -519,7 +506,7 @@ def policy_renewal_sms(family_message_template, range_from=None, range_to=None, 
             village_name=village,
         ))
         sms_header_text = sms_header.render(sms_header_context)
-        sms_message = sms_header_text + "\n" + sms_photos
+        sms_message = sms_header_text
 
         if renewal.new_officer.phone_communication:
             sms_queue.append(SmsQueueItem(i_count, renewal.new_officer.phone, sms_message))

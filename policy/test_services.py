@@ -4,7 +4,7 @@ from core.models import InteractiveUser, User
 from core.test_helpers import create_test_officer
 from django.core.exceptions import PermissionDenied
 from django.test import TestCase
-from insuree.test_helpers import create_test_insuree
+from insuree.test_helpers import create_test_insuree, create_test_photo
 from medical.test_helpers import create_test_item
 from policy.test_helpers import create_test_policy
 from product.test_helpers import create_test_product
@@ -260,3 +260,70 @@ class RenewalsTestCase(TestCase):
         officer.delete()
         product.delete()
         insuree.delete()
+
+    def test_insert_renewal_details(self):
+        # Given
+        from core import datetime, datetimedelta
+
+        insuree_newpic = create_test_insuree(
+            custom_props={"photo_date": datetime.datetime.now() - datetimedelta(days=30)})
+        insuree_oldpic = create_test_insuree(custom_props={"photo_date": "2010-01-01", "chf_id": "CHFMARK"})  # 5 years by default
+        product = create_test_product("VISIT")
+        officer = create_test_officer(custom_props={"phone": "+32444444444", "phone_communication": True})
+        photo_newpic = create_test_photo(insuree_newpic.id, officer.id)
+        photo_oldpic = create_test_photo(insuree_oldpic.id, officer.id)
+
+        policy_new_pic = create_test_policy(
+            product=product,
+            insuree=insuree_newpic,
+            custom_props={
+                "expiry_date": datetime.datetime.now() + datetimedelta(days=5),
+                "officer": officer,
+            },
+        )
+        policy_old_pic = create_test_policy(
+            product=product,
+            insuree=insuree_oldpic,
+            custom_props={
+                "expiry_date": datetime.datetime.now() + datetimedelta(days=5),
+                "officer": officer,
+            },
+        )
+
+        # when
+        insert_renewals(officer_id=officer.id)
+
+        # then
+        renewals_new = PolicyRenewal.objects.filter(insuree=insuree_newpic)
+        expected_renewal = renewals_new.filter(policy=policy_new_pic).first()
+        self.assertIsNotNone(expected_renewal)
+        self.assertIsNone(expected_renewal.details.first())
+
+        renewals_old = PolicyRenewal.objects.filter(insuree=insuree_oldpic)
+        expected_renewal_old = renewals_old.filter(policy=policy_old_pic).first()
+        self.assertIsNotNone(expected_renewal_old)
+        detail = expected_renewal_old.details.first()
+        self.assertIsNotNone(detail)
+
+        # ALSO WHEN
+        sms_queue = policy_renewal_sms("UNUSED")  # Uses the default template
+        self.assertEquals(len(sms_queue), 2)
+        old_sms = [sms.sms_message for sms in sms_queue if "CHFMARK" in sms.sms_message]
+        self.assertEquals(len(old_sms), 1)
+        self.assertTrue('HOF\nCHFMARK\nTest Last First Second\n\n' in old_sms[0])
+
+        # tearDown
+        renewals_old.first().details.all().delete()
+        renewals_old.delete()
+        renewals_new.first().details.all().delete()
+        renewals_new.delete()
+        policy_old_pic.insuree_policies.all().delete()
+        policy_old_pic.delete()
+        policy_new_pic.insuree_policies.all().delete()
+        policy_new_pic.delete()
+        officer.delete()
+        product.delete()
+        photo_newpic.delete()
+        photo_oldpic.delete()
+        insuree_oldpic.delete()
+        insuree_newpic.delete()

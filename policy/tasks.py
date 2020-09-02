@@ -9,7 +9,9 @@ def get_policies_for_renewal(interval=None, region=None, district=None, ward=Non
                              date_from=None, date_to=None, family_message_template=None, sms_header_template=None):
     """
     Find policies that are due for renewal, add them to the renewal queue, mark the expired policies as expired
-    All parameters are optional
+    All parameters are optional.
+    This method is more a sample than the actual code since it should be heavily customized
+
     :param interval: number of days before expiration to send renewal
     :param region: region id for which to send the renewals
     :param district: district for which to send the renewals
