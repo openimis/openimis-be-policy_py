@@ -1,19 +1,18 @@
 import uuid
 
+from core import fields
+from core import models as core_models
+from core.models import Officer
 from django.conf import settings
 from django.db import models
-from core import fields
-from core.models import Officer
 from graphql import ResolveInfo
 from insuree.models import Family
-from location.models import UserDistrict
 from product.models import Product
-from core import models as core_models
 
 
 class Policy(core_models.VersionedModel):
     id = models.AutoField(db_column='PolicyID', primary_key=True)
-    uuid = models.CharField(db_column='PolicyUUID', max_length=36, default=uuid.uuid4, unique = True)
+    uuid = models.CharField(db_column='PolicyUUID', max_length=36, default=uuid.uuid4, unique=True)
 
     stage = models.CharField(db_column='PolicyStage', max_length=1, blank=True, null=True)
     status = models.SmallIntegerField(db_column='PolicyStatus', blank=True, null=True)
@@ -26,7 +25,8 @@ class Policy(core_models.VersionedModel):
     expiry_date = fields.DateField(db_column='ExpiryDate', blank=True, null=True)
 
     product = models.ForeignKey(Product, models.DO_NOTHING, db_column='ProdID', related_name="policies")
-    officer = models.ForeignKey(Officer, models.DO_NOTHING, db_column='OfficerID', blank=True, null=True, related_name="policies")
+    officer = models.ForeignKey(Officer, models.DO_NOTHING, db_column='OfficerID', blank=True, null=True,
+                                related_name="policies")
 
     offline = models.BooleanField(db_column='isOffline', blank=True, null=True)
     audit_user_id = models.IntegerField(db_column='AuditUserID')
@@ -60,3 +60,31 @@ class Policy(core_models.VersionedModel):
         #         health_facility__location_id__in=[l.location.id for l in dist]
         #     )
         return queryset
+
+
+class PolicyRenewal(core_models.VersionedModel):
+    id = models.AutoField(db_column='RenewalID', primary_key=True)
+    uuid = models.CharField(db_column='RenewalUUID', max_length=36, default=uuid.uuid4, unique=True)
+
+    new_officer = models.ForeignKey(Officer, models.DO_NOTHING, db_column='NewOfficerID',
+                                    blank=True, null=True, related_name="policy_renewals")
+    insuree = models.ForeignKey('insuree.Insuree', models.DO_NOTHING, db_column='InsureeID',
+                                related_name='policy_renewals')
+    policy = models.ForeignKey('policy.Policy', models.DO_NOTHING, db_column='PolicyID',
+                               related_name='policy_renewals')
+    new_product = models.ForeignKey(Product, db_column='NewProdID', on_delete=models.DO_NOTHING,
+                                       related_name="policy_renewals")
+
+    renewal_prompt_date = fields.DateField(db_column='RenewalPromptDate')
+    renewal_date = fields.DateField(db_column='RenewalDate')
+    phone_number = models.CharField(db_column='PhoneNumber', max_length=25, blank=True, null=True)
+    sms_status = models.SmallIntegerField(db_column='SMSStatus', default=0)  # TODO choices
+    renewal_warnings = models.SmallIntegerField(db_column='RenewalWarnings', null=True, blank=True, default=0)  # TODO choices
+    response_status = models.IntegerField(db_column='ResponseStatus', null=True, blank=True, default=0)  # TODO Choices
+    response_date = fields.DateTimeField(db_column='ResponseDate', null=True, blank=True)
+
+    audit_user_id = models.IntegerField(db_column='AuditCreateUser', null=True, blank=True)
+
+    class Meta:
+        managed = False
+        db_table = 'tblPolicyRenewals'
