@@ -32,6 +32,9 @@ class Policy(core_models.VersionedModel):
     audit_user_id = models.IntegerField(db_column='AuditUserID')
     # row_id = models.BinaryField(db_column='RowID', blank=True, null=True)
 
+    def balance(self):
+        return self.value - sum([p.amount for p in self.premiums.filter(is_photo_fee=True).all()])
+
     class Meta:
         managed = False
         db_table = 'tblPolicy'

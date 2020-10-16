@@ -2,14 +2,28 @@ import graphene
 from graphene_django import DjangoObjectType
 from .models import Policy
 from core import prefix_filterset, filter_validity, ExtendedConnection, ExtendedRelayConnection
+from core.schema import OfficerGQLType
+from product.schema import ProductGQLType
 
 
 class PolicyGQLType(DjangoObjectType):
+    balance = graphene.Float(source='balance')
+
     class Meta:
         model = Policy
         interfaces = (graphene.relay.Node,)
         filter_fields = {
+            "id": ["exact"],
             "uuid": ["exact"],
+            "enroll_date": ["exact", "lt", "lte", "gt", "gte"],
+            "start_date": ["exact", "lt", "lte", "gt", "gte"],
+            "effective_date": ["exact", "lt", "lte", "gt", "gte"],
+            "expiry_date": ["exact", "lt", "lte", "gt", "gte"],
+            "stage": ["exact"],
+            "status":  ["exact", "lt", "lte", "gt", "gte"],
+            "value": ["exact", "lt", "lte", "gt", "gte"],
+            **prefix_filterset("product__", ProductGQLType._meta.filter_fields),
+            **prefix_filterset("officer__", OfficerGQLType._meta.filter_fields),
         }
         connection_class = ExtendedConnection
 

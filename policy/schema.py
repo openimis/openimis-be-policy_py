@@ -5,6 +5,12 @@ from .services import ByFamilyRequest, ByFamilyService
 from .services import EligibilityRequest, EligibilityService
 from .apps import PolicyConfig
 from django.utils.translation import gettext as _
+import graphene_django_optimizer as gql_optimizer
+from graphene_django.filter import DjangoFilterConnectionField
+from core.schema import OfficerGQLType, OrderedDjangoFilterConnectionField
+from contribution.models import Premium
+from insuree.models import Family, Insuree, InsureePolicy
+from django.db.models import OuterRef, Subquery, Sum, F, Count
 
 # We do need all queries and mutations in the namespace here.
 from .gql_queries import *  # lgtm [py/polluting-import]
@@ -12,6 +18,16 @@ from .gql_mutations import *  # lgtm [py/polluting-import]
 
 
 class Query(graphene.ObjectType):
+    policies = OrderedDjangoFilterConnectionField(
+        PolicyGQLType,
+        region_id=graphene.Int(),
+        district_id=graphene.Int(),
+        balance_lte=graphene.Float(),
+        balance_gte=graphene.Float(),
+        showHistory=graphene.Boolean(),
+        showInactive=graphene.Boolean(),
+        orderBy=graphene.List(of_type=graphene.String),
+    )
     # Note:
     # A Policy is bound to a Family...
     # but an insuree of the family is only covered by the family policy
@@ -48,6 +64,7 @@ class Query(graphene.ObjectType):
         chfId=graphene.String(required=True),
         serviceCode=graphene.String(required=True),
     )
+    policy_officers = DjangoFilterConnectionField(OfficerGQLType)
 
     @staticmethod
     def _to_policy_by_family_or_insuree_item(item):
@@ -74,6 +91,34 @@ class Query(graphene.ObjectType):
             validity_from=item.validity_from,
             validity_to=item.validity_to
         )
+
+    def resolve_policies(self, info, **kwargs):
+        if not info.context.user.has_perms(PolicyConfig.gql_query_policies_perms):
+            raise PermissionDenied(_("unauthorized"))
+        query = Policy.objects
+        if not kwargs.get('showHistory', False):
+            query = query.filter(*filter_validity(**kwargs))
+        if kwargs.get('showInactive', False):
+            family_count = Insuree.objects.values('family_id')\
+                .filter(validity_to__isnull=True).annotate(m_count=Count('id'))
+            family_sq = family_count.filter(family_id=OuterRef('family_id'))
+            covered_count = InsureePolicy.objects.values('policy_id')\
+                .filter(validity_to__isnull=True).annotate(i_count=Count('id'))
+            covered_sq = covered_count.filter(policy_id=OuterRef('id'))
+            query = query.annotate(
+                inactive_count=Subquery(family_sq.values('m_count')) - Subquery(covered_sq.values('i_count'))
+            )
+            query = query.filter(inactive_count__gt=0)
+        if kwargs.get('balance_lte') or kwargs.get('balance_gte'):
+            sum_premiums = Premium.objects.filter(is_photo_fee=False).values('policy_id').annotate(sum=Sum('amount'))
+            sum_premiums_subquery = sum_premiums.filter(policy_id=OuterRef('id'))
+            query = query.annotate(balance=F('value') - Subquery(sum_premiums_subquery.values('sum')))
+        if kwargs.get('balance_lte'):
+            query = query.filter(balance__lte=kwargs.get('balance_lte'))
+        if kwargs.get('balance_gte'):
+            query = query.filter(balance__gte=kwargs.get('balance_gte'))
+        return gql_optimizer.query(query.all(), info)
+
 
     def resolve_policies_by_insuree(self, info, **kwargs):
         if not info.context.user.has_perms(PolicyConfig.gql_query_policies_by_insuree_perms):
@@ -157,3 +202,7 @@ class Query(graphene.ObjectType):
             user=info.context.user,
             req=req
         )
+
+    def resolve_policy_officers(self, info, **kwargs):
+        if not info.context.user.has_perms(PolicyConfig.gql_query_policy_officers_perms):
+            raise PermissionDenied(_("unauthorized"))
