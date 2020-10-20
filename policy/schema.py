@@ -117,6 +117,11 @@ class Query(graphene.ObjectType):
             query = query.filter(balance__lte=kwargs.get('balance_lte'))
         if kwargs.get('balance_gte'):
             query = query.filter(balance__gte=kwargs.get('balance_gte'))
+        if kwargs.get('district_id'):
+            query = query.filter(family__location__parent__parent_id=kwargs.get('district_id'))
+        elif kwargs.get('region_id'):
+            query = query.filter(family__location__parent__parent__parent_id=kwargs.get('region_id'))
+
         return gql_optimizer.query(query.all(), info)
 
 
