@@ -7,7 +7,7 @@ from product.schema import ProductGQLType
 
 
 class PolicyGQLType(DjangoObjectType):
-    balance = graphene.Float(source='balance')
+    sum_premiums = graphene.Float(source='sum_premiums')
 
     class Meta:
         model = Policy
