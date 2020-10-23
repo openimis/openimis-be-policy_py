@@ -13,10 +13,12 @@ class PolicyInputType(OpenIMISMutation.Input):
     # and only initialized/updated via dedicated mutations (renew , cancel,...)
     id = graphene.Int(required=False, read_only=True)
     uuid = graphene.String(required=False)
-    enroll_date = graphene.DateTime(required=True)
-    start_date = graphene.DateTime(required=True)
-    expiry_date = graphene.DateTime(required=True)
+    enroll_date = graphene.Date(required=True)
+    start_date = graphene.Date(required=True)
+    expiry_date = graphene.Date(required=True)
+    value = graphene.Decimal(max_digits=18, decimal_places=2, required=True)
     product_id = graphene.Int(required=True)
+    family_id = graphene.Int(required=True)
     officer_id = graphene.Int(required=True)
 
 
@@ -24,7 +26,9 @@ def reset_policy_before_update(policy):
     policy.enroll_date = None
     policy.start_date = None
     policy.expiry_date = None
+    policy.value = None
     policy.product_id = None
+    policy.family_id = None
     policy.officer_id = None
 
 
@@ -73,6 +77,8 @@ class CreatePolicyMutation(CreateOrUpdatePolicyMutation):
     @classmethod
     def async_mutate(cls, user, **data):
         try:
+            data["status"] = Policy.STATUS_IDLE
+            data["stage"] = Policy.STAGE_NEW
             return cls.do_mutate(PolicyConfig.gql_mutation_create_policies_perms, user, **data)
         except Exception as exc:
             return [{
