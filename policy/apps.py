@@ -10,6 +10,7 @@ DEFAULT_CFG = {
     "gql_query_policies_by_family_perms": ['101201'],
     "gql_query_eligibilities_perms": ['101201'],
     "policy_renewal_interval": 14,  # Notify renewal nb of days before expiry date
+    "policy_location_via": "family",  # ... or product
 }
 
 
@@ -22,6 +23,7 @@ class PolicyConfig(AppConfig):
     gql_query_policies_by_family_perms = []
     gql_query_eligibilities_perms = []
     policy_renewal_interval = 14
+    policy_location_via = 'family'
 
     def _configure_permissions(self, cfg):
         PolicyConfig.gql_query_policies_perms = cfg["gql_query_policies_perms"]
@@ -33,8 +35,11 @@ class PolicyConfig(AppConfig):
     def _configure_renewal(self, cfg):
         PolicyConfig.policy_renewal_interval = cfg["policy_renewal_interval"]
 
+    def _configure_location(selfself, cfg):
+        PolicyConfig.policy_location_via = cfg["policy_location_via"]
     def ready(self):
         from core.models import ModuleConfiguration
         cfg = ModuleConfiguration.get_or_default(MODULE_NAME, DEFAULT_CFG)
         self._configure_permissions(cfg)
         self._configure_renewal(cfg)
+        self._configure_location(cfg)

@@ -38,6 +38,9 @@ class Policy(core_models.VersionedModel):
     def claim_ded_rems(self):
         return self.claim_ded_rems
 
+    def is_new(self):
+        return not self.stage or self.stage == Policy.STAGE_NEW
+
     class Meta:
         managed = False
         db_table = 'tblPolicy'
@@ -46,6 +49,7 @@ class Policy(core_models.VersionedModel):
     STATUS_ACTIVE = 2
     STATUS_SUSPENDED = 4
     STATUS_EXPIRED = 8
+    STATUS_READY = 16
 
     STAGE_NEW = 'N'
     STAGE_RENEWED = 'R'
@@ -94,3 +98,14 @@ class PolicyRenewal(core_models.VersionedModel):
     class Meta:
         managed = False
         db_table = 'tblPolicyRenewals'
+
+
+class PolicyMutation(core_models.UUIDModel):
+    policy = models.ForeignKey(Policy, models.DO_NOTHING,
+                                 related_name='mutations')
+    mutation = models.ForeignKey(
+        core_models.MutationLog, models.DO_NOTHING, related_name='policies')
+
+    class Meta:
+        managed = True
+        db_table = "location_PolicyMutation"

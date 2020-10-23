@@ -1,5 +1,6 @@
 import graphene
 from django.core.exceptions import PermissionDenied
+from django.db.models import Q
 from .services import ByInsureeRequest, ByInsureeService
 from .services import ByFamilyRequest, ByFamilyService
 from .services import EligibilityRequest, EligibilityService
@@ -7,17 +8,28 @@ from .apps import PolicyConfig
 from django.utils.translation import gettext as _
 import graphene_django_optimizer as gql_optimizer
 from graphene_django.filter import DjangoFilterConnectionField
-from core.schema import OfficerGQLType, OrderedDjangoFilterConnectionField
+from core.schema import signal_mutation_module_validate, OrderedDjangoFilterConnectionField
+from .models import PolicyMutation
+from product.models import Product
 from contribution.models import Premium
 from insuree.models import Family, Insuree, InsureePolicy
 from django.db.models import OuterRef, Subquery, Sum, F, Count
+from location.apps import LocationConfig
 
 # We do need all queries and mutations in the namespace here.
 from .gql_queries import *  # lgtm [py/polluting-import]
 from .gql_mutations import *  # lgtm [py/polluting-import]
 
+from .values import policy_values
 
 class Query(graphene.ObjectType):
+    policy_values = graphene.Field(
+        PolicyGQLType,
+        stage=graphene.String(required=True),
+        enrollDate=graphene.DateTime(required=True),
+        product_id=graphene.Int(required=True),
+        family_id=graphene.Int(required=True)
+    )
     policies = OrderedDjangoFilterConnectionField(
         PolicyGQLType,
         region_id=graphene.Int(),
@@ -66,31 +78,15 @@ class Query(graphene.ObjectType):
     )
     policy_officers = DjangoFilterConnectionField(OfficerGQLType)
 
-    @staticmethod
-    def _to_policy_by_family_or_insuree_item(item):
-        return PolicyByFamilyOrInsureeGQLType(
-            policy_id=item.policy_id,
-            policy_uuid=item.policy_uuid,
-            policy_value=item.policy_value,
-            product_code=item.product_code,
-            product_name=item.product_name,
-            start_date=item.start_date,
-            enroll_date=item.enroll_date,
-            effective_date=item.effective_date,
-            expiry_date=item.expiry_date,
-            officer_code=item.officer_code,
-            officer_name=item.officer_name,
-            status=item.status,
-            ded=item.ded,
-            ded_in_patient=item.ded_in_patient,
-            ded_out_patient=item.ded_out_patient,
-            ceiling=item.ceiling,
-            ceiling_in_patient=item.ceiling_in_patient,
-            ceiling_out_patient=item.ceiling_out_patient,
-            balance=item.balance,
-            validity_from=item.validity_from,
-            validity_to=item.validity_to
+    def resolve_policy_values(self, info, **kwargs):
+        product = Product.objects.get(id=kwargs.get('product_id'))
+        policy = PolicyGQLType(
+            stage=kwargs.get('stage'),
+            enroll_date=kwargs.get('enrollDate'),
+            start_date=kwargs.get('enrollDate'),
+            product=product,
         )
+        return policy_values(policy, kwargs.get('family_id'))
 
     def resolve_policies(self, info, **kwargs):
         if not info.context.user.has_perms(PolicyConfig.gql_query_policies_perms):
@@ -117,13 +113,41 @@ class Query(graphene.ObjectType):
             query = query.filter(balance__lte=kwargs.get('balance_lte'))
         if kwargs.get('balance_gte'):
             query = query.filter(balance__gte=kwargs.get('balance_gte'))
-        if kwargs.get('district_id'):
-            query = query.filter(family__location__parent__parent_id=kwargs.get('district_id'))
-        elif kwargs.get('region_id'):
-            query = query.filter(family__location__parent__parent__parent_id=kwargs.get('region_id'))
-
+        location_id = kwargs.get('district_id') if kwargs.get('district_id') else kwargs.get('region_id')
+        if location_id:
+            location_level = 2 if kwargs.get('district_id') else 1
+            f = '_id'
+            for i in range(len(LocationConfig.location_types) - location_level):
+                f = "__parent" + f
+            f = PolicyConfig.policy_location_via + '__location' + f
+            query = query.filter(Q(**{f: location_id}))
         return gql_optimizer.query(query.all(), info)
 
+    @staticmethod
+    def _to_policy_by_family_or_insuree_item(item):
+        return PolicyByFamilyOrInsureeGQLType(
+            policy_id=item.policy_id,
+            policy_uuid=item.policy_uuid,
+            policy_value=item.policy_value,
+            product_code=item.product_code,
+            product_name=item.product_name,
+            start_date=item.start_date,
+            enroll_date=item.enroll_date,
+            effective_date=item.effective_date,
+            expiry_date=item.expiry_date,
+            officer_code=item.officer_code,
+            officer_name=item.officer_name,
+            status=item.status,
+            ded=item.ded,
+            ded_in_patient=item.ded_in_patient,
+            ded_out_patient=item.ded_out_patient,
+            ceiling=item.ceiling,
+            ceiling_in_patient=item.ceiling_in_patient,
+            ceiling_out_patient=item.ceiling_out_patient,
+            balance=item.balance,
+            validity_from=item.validity_from,
+            validity_to=item.validity_to
+        )
 
     def resolve_policies_by_insuree(self, info, **kwargs):
         if not info.context.user.has_perms(PolicyConfig.gql_query_policies_by_insuree_perms):
@@ -211,3 +235,21 @@ class Query(graphene.ObjectType):
     def resolve_policy_officers(self, info, **kwargs):
         if not info.context.user.has_perms(PolicyConfig.gql_query_policy_officers_perms):
             raise PermissionDenied(_("unauthorized"))
+
+
+class Mutation(graphene.ObjectType):
+    create_policy = CreatePolicyMutation.Field()
+    update_policy = UpdatePolicyMutation.Field()
+
+
+def on_policy_mutation(sender, **kwargs):
+    uuid = kwargs['data'].get('uuid', None)
+    if not uuid:
+        return []
+    impacted_policy = Policy.objects.get(uuid=uuid)
+    PolicyMutation.objects.create(policy=impacted_policy, mutation_id=kwargs['mutation_log_id'])
+    return []
+
+
+def bind_signals():
+    signal_mutation_module_validate["policy"].connect(on_policy_mutation)
