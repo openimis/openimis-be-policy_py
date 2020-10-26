@@ -1,7 +1,9 @@
+import sys
 import datetime as py_datetime
+from django.db.models import Prefetch
 from core.apps import CoreConfig
 from .models import Policy
-from insuree.models import Family
+from insuree.models import Family, Insuree
 
 
 def cycle_start(product, cycle, ref_date):
@@ -48,7 +50,14 @@ def set_expiry_date(policy):
 
 
 def family_counts(product, family_id):
-    family = Family.objects.prefetch_related('members').get(id=family_id)
+    prefetch = Prefetch(
+        'members',
+        queryset=Insuree.objects.filter(validity_to__isnull=True).order_by('validity_from')
+    )
+    family = Family.objects \
+        .prefetch_related(prefetch) \
+        .get(id=family_id)
+
     adults = 0
     other_adults = 0
     extra_adults = 0
@@ -56,7 +65,9 @@ def family_counts(product, family_id):
     other_children = 0
     extra_children = 0
     total = 0
-    for member in family.members.filter(validity_to__isnull=True).all():
+    # sad, but can't get the limit inside the prefetch
+    # product.member_count] is NOT NULL (but can be 0)
+    for member in family.members.all()[:product.member_count]:
         total += 1
         age = member.age()
         if age >= CoreConfig.age_of_majority and member.relationship_id != 7:
