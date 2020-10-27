@@ -66,7 +66,7 @@ def family_counts(product, family_id):
     extra_children = 0
     total = 0
     # sad, but can't get the limit inside the prefetch
-    # product.member_count] is NOT NULL (but can be 0)
+    # product.member_count is NOT NULL (but can be 0)
     for member in family.members.all()[:product.member_count]:
         total += 1
         age = member.age()

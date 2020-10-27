@@ -41,6 +41,9 @@ class Policy(core_models.VersionedModel):
     def is_new(self):
         return not self.stage or self.stage == Policy.STAGE_NEW
 
+    def label(self):
+        return "%s"
+
     class Meta:
         managed = False
         db_table = 'tblPolicy'

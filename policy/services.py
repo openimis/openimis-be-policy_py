@@ -94,6 +94,7 @@ class ByInsureeResponse(object):
     def __eq__(self, other):
         return isinstance(other, self.__class__) and self.__dict__ == other.__dict__
 
+
 class FilteredPoliciesService(object):
 
     def __init__(self, user):
@@ -150,6 +151,7 @@ class FilteredPoliciesService(object):
                 .annotate(not_null_validity_to=Coalesce('validity_to', py_datetime.max)) \
                 .order_by('product__code', 'status', '-not_null_expiry_date', '-not_null_validity_to', '-validity_from')
         return res
+
 
 class ByInsureeService(FilteredPoliciesService):
 
@@ -223,9 +225,11 @@ class ByFamilyService(FilteredPoliciesService):
         # .distinct('product__code') >> DISTINCT ON fields not supported by MS-SQL
         if by_family_request.active_or_last_expired_only:
             products = {}
-            for r in res:
-                if r.product.code not in products.keys():
-                    products[r.product.code] = r
+            for policy in res:
+                if policy.status != Policy.STATUS_SUSPENDED and policy.status != Policy.STATUS_EXPIRED:
+                    products['policy.product.code-%s' % policy.status] = policy
+                elif policy.product.code not in products.keys():
+                    products[policy.product.code] = policy
             res = products.values()
         items = tuple(
             map(lambda x: FilteredPoliciesService._to_item(x), res)
@@ -340,7 +344,8 @@ class EligibilityService(object):
             )
 
 
-def insert_renewals(date_from=None, date_to=None, officer_id=None, reminding_interval=None, location_id=None, location_levels=4):
+def insert_renewals(date_from=None, date_to=None, officer_id=None, reminding_interval=None, location_id=None,
+                    location_levels=4):
     if reminding_interval is None:
         reminding_interval = PolicyConfig.policy_renewal_interval
     from core import datetime
@@ -406,8 +411,8 @@ def insert_renewals(date_from=None, date_to=None, officer_id=None, reminding_int
                 renewal_warning |= 4
 
         # Check if the policy has another following policy
-        following_policies = Policy.objects.filter(family_id=policy.family_id)\
-            .filter(Q(product_id=policy.product_id) | Q(product_id=product.id))\
+        following_policies = Policy.objects.filter(family_id=policy.family_id) \
+            .filter(Q(product_id=policy.product_id) | Q(product_id=product.id)) \
             .filter(start_date__gte=renewal_date)
         if not following_policies.first():
             policy_renewal, policy_renewal_created = PolicyRenewal.objects.get_or_create(
@@ -475,13 +480,13 @@ HOF{% endif %}
     if not range_to:
         range_to = now
 
-    renewals = PolicyRenewal.objects.filter(phone_number__isnull=False)\
-        .filter(renewal_prompt_date__gte=range_from)\
-        .filter(renewal_prompt_date__lte=range_to)\
-        .prefetch_related("insuree")\
-        .prefetch_related("new_officer")\
-        .prefetch_related("new_product")\
-        .prefetch_related("details")\
+    renewals = PolicyRenewal.objects.filter(phone_number__isnull=False) \
+        .filter(renewal_prompt_date__gte=range_from) \
+        .filter(renewal_prompt_date__lte=range_to) \
+        .prefetch_related("insuree") \
+        .prefetch_related("new_officer") \
+        .prefetch_related("new_product") \
+        .prefetch_related("details") \
         .prefetch_related("details__insuree")
 
     for renewal in renewals:
@@ -520,7 +525,7 @@ HOF{% endif %}
                 renewal=renewal,
                 expiry_date=expiry_date,
             )))
-            #new_family_message = "" # REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(@FamilyMessage, '@@InsuranceID', @CHFID), '@@LastName', @InsLastName),
+            # new_family_message = "" # REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(@FamilyMessage, '@@InsuranceID', @CHFID), '@@LastName', @InsLastName),
             # '@@OtherNames', @InsOtherNames), '@@ProductCode', @ProductCode), '@@ProductName', @ProductName),
             # '@@ExpiryDate', FORMAT(@ExpiryDate,'dd MMM yyyy'))
 

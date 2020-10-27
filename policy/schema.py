@@ -240,14 +240,19 @@ class Query(graphene.ObjectType):
 class Mutation(graphene.ObjectType):
     create_policy = CreatePolicyMutation.Field()
     update_policy = UpdatePolicyMutation.Field()
+    delete_policies = DeletePoliciesMutation.Field()
 
 
 def on_policy_mutation(sender, **kwargs):
-    uuid = kwargs['data'].get('uuid', None)
-    if not uuid:
+    uuids = kwargs['data'].get('uuids', [])
+    if not uuids:
+        uuid = kwargs['data'].get('policy_uuid', None)
+        uuids = [uuid] if uuid else []
+    if not uuids:
         return []
-    impacted_policy = Policy.objects.get(uuid=uuid)
-    PolicyMutation.objects.create(policy=impacted_policy, mutation_id=kwargs['mutation_log_id'])
+    impacted_policies = Policy.objects.filter(uuid__in=uuids).all()
+    for policy in impacted_policies:
+        PolicyMutation.objects.create(policy=policy, mutation_id=kwargs['mutation_log_id'])
     return []
 
 

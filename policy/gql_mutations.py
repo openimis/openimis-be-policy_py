@@ -87,7 +87,7 @@ class CreatePolicyMutation(CreateOrUpdatePolicyMutation):
 
 
 class UpdatePolicyMutation(CreateOrUpdatePolicyMutation):
-    _mutation_module = "location"
+    _mutation_module = "policy"
     _mutation_class = "UpdatePolicyMutation"
 
     class Input(PolicyInputType):
@@ -101,3 +101,45 @@ class UpdatePolicyMutation(CreateOrUpdatePolicyMutation):
             return [{
                 'message': _("policy.mutation.failed_to_update_policy"),
                 'detail': str(exc)}]
+
+
+def set_policy_deleted(policy):
+    try:
+        policy.delete_history()
+        return []
+    except Exception as exc:
+        return {
+            'title': policy.uuid,
+            'list': [{
+                'message': _("policy.mutation.failed_to_change_status_of_policy") % {'policy': str(policy)},
+                'detail': policy.uuid}]
+        }
+
+
+class DeletePoliciesMutation(OpenIMISMutation):
+    _mutation_module = "policy"
+    _mutation_class = "DeletePoliciesMutation"
+
+    class Input(OpenIMISMutation.Input):
+        uuids = graphene.List(graphene.String)
+
+    @classmethod
+    def async_mutate(cls, user, **data):
+        if not user.has_perms(PolicyConfig.gql_mutation_delete_policies_perms):
+            raise PermissionDenied(_("unauthorized"))
+        errors = []
+        for policy_uuid in data["uuids"]:
+            policy = Policy.objects \
+                .filter(uuid=policy_uuid) \
+                .first()
+            if policy is None:
+                errors += {
+                    'title': policy_uuid,
+                    'list': [{'message': _(
+                        "policy.validation.id_does_not_exist") % {'id': policy_uuid}}]
+                }
+                continue
+            errors += set_policy_deleted(policy)
+        if len(errors) == 1:
+            errors = errors[0]['list']
+        return errors
