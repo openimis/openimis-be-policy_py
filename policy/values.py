@@ -153,9 +153,9 @@ def discount(policy, prev_policy):
         discount_renew(policy, prev_policy)
 
 
-def set_value(policy, family_id, prev_policy):
+def set_value(policy, family, prev_policy):
     product = policy.product
-    f_counts = family_counts(product, family_id)
+    f_counts = family_counts(product, family)
 
     contributions = sum_contributions(product, f_counts)
     general_assembly = sum_general_assemblies(product, f_counts)
@@ -165,7 +165,7 @@ def set_value(policy, family_id, prev_policy):
 
 
 def policy_values(policy, family, prev_policy):
-    set_start_date(policy, prev_policy)
+    set_start_date(policy)
     set_expiry_date(policy)
     set_value(policy, family, prev_policy)
     return policy
