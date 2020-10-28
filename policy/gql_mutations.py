@@ -116,6 +116,8 @@ class RenewPolicyMutation(CreateRenewOrUpdatePolicyMutation):
             # ensure we don't update the existing one, but recreate a new one!
             if 'policy_uuid' in data:
                 data.pop('policy_uuid')
+            data["status"] = Policy.STATUS_IDLE
+            data["stage"] = Policy.STAGE_RENEWED
             return cls.do_mutate(PolicyConfig.gql_mutation_edit_policies_perms, user, **data)
         except Exception as exc:
             return [{
