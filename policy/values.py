@@ -1,6 +1,5 @@
 import sys
 import datetime as py_datetime
-from django.db.models import Prefetch
 from core.apps import CoreConfig
 from .models import Policy
 from insuree.models import Family, Insuree
@@ -52,11 +51,6 @@ def set_expiry_date(policy):
 
 
 def family_counts(product, family):
-    prefetch = Prefetch(
-        'members',
-        queryset=Insuree.objects.filter(validity_to__isnull=True).order_by('validity_from')
-    )
-
     adults = 0
     other_adults = 0
     extra_adults = 0

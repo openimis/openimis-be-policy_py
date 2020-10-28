@@ -1,5 +1,6 @@
 import graphene
 from django.core.exceptions import PermissionDenied
+from django.db.models import Prefetch
 from django.db.models import Q
 from .services import ByInsureeRequest, ByInsureeService
 from .services import ByFamilyRequest, ByFamilyService
@@ -86,6 +87,10 @@ class Query(graphene.ObjectType):
             enroll_date=kwargs.get('enrollDate'),
             start_date=kwargs.get('enrollDate'),
             product=product,
+        )
+        prefetch = Prefetch(
+            'members',
+            queryset=Insuree.objects.filter(validity_to__isnull=True).order_by('validity_from')
         )
         family = Family.objects \
             .prefetch_related(prefetch) \
