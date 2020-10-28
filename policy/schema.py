@@ -25,6 +25,7 @@ from .values import policy_values
 class Query(graphene.ObjectType):
     policy_values = graphene.Field(
         PolicyGQLType,
+        prev_uuid=graphene.String(required=False),
         stage=graphene.String(required=True),
         enrollDate=graphene.DateTime(required=True),
         product_id=graphene.Int(required=True),
@@ -86,7 +87,13 @@ class Query(graphene.ObjectType):
             start_date=kwargs.get('enrollDate'),
             product=product,
         )
-        return policy_values(policy, kwargs.get('family_id'))
+        family = Family.objects \
+            .prefetch_related(prefetch) \
+            .get(id=kwargs.get('family_id'))
+        prev_policy = None
+        if 'prev_uuid' in kwargs:
+            prev_policy = Policy.objects.get(uuid=kwargs.get('prev_uuid'))
+        return policy_values(policy, family, prev_policy)
 
     def resolve_policies(self, info, **kwargs):
         if not info.context.user.has_perms(PolicyConfig.gql_query_policies_perms):
@@ -241,6 +248,7 @@ class Mutation(graphene.ObjectType):
     create_policy = CreatePolicyMutation.Field()
     update_policy = UpdatePolicyMutation.Field()
     delete_policies = DeletePoliciesMutation.Field()
+    renew_policy = RenewPolicyMutation.Field()
 
 
 def on_policy_mutation(sender, **kwargs):

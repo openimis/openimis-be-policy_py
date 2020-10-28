@@ -18,24 +18,26 @@ def cycle_start(product, cycle, ref_date):
 def set_start_date(policy):
     from core import datetime, datetimedelta
     product = policy.product
-    admin = product.administration_period if product.administration_period and policy.stage == Policy.STAGE_NEW else 0
+    ref_enroll_date = policy.enroll_date
+    if policy.stage == Policy.STAGE_NEW and product.administration_period:
+        ref_enroll_date = (
+                datetime.date.from_ad_date(ref_enroll_date) +
+                datetimedelta(months=product.administration_period)
+        ).to_ad_date()
 
-    if not product.has_cycle() and admin:
-        policy.start_date = (datetime.date.from_ad_date(policy.enroll_date) + datetimedelta(months=admin)).to_ad_date()
-        return
-    elif not product.has_cycle():
-        policy.start_date = policy.enroll_date
+    if not product.has_cycle():
+        policy.start_date = ref_enroll_date
         return
 
     grace = product.grace_period if product.grace_period else 0
-    ref_date = (datetime.date.from_ad_date(policy.enroll_date) - datetimedelta(months=grace)).to_ad_date()
+    ref_date = (datetime.date.from_ad_date(ref_enroll_date) - datetimedelta(months=grace)).to_ad_date()
     for i in range(4):
         start = cycle_start(product, i, ref_date)
         if start:
             policy.start_date = start
             return
     policy.start_date = py_datetime.datetime.strptime(
-        "%s-%s" % (product.start_cycle_1, policy.enroll_date.year + 1),
+        "%s-%s" % (product.start_cycle_1, ref_enroll_date.year + 1),
         '%d-%m-%Y'
     )
 
@@ -49,14 +51,11 @@ def set_expiry_date(policy):
     ).to_ad_date()
 
 
-def family_counts(product, family_id):
+def family_counts(product, family):
     prefetch = Prefetch(
         'members',
         queryset=Insuree.objects.filter(validity_to__isnull=True).order_by('validity_from')
     )
-    family = Family.objects \
-        .prefetch_related(prefetch) \
-        .get(id=family_id)
 
     adults = 0
     other_adults = 0
@@ -121,37 +120,58 @@ def sum_general_assemblies(product, f_counts):
     return f_counts["total"] * get_attr(product, 'general_assembly_fee')
 
 
-def sum_registrations(product, f_counts):
+def sum_registrations(policy, product, f_counts):
+    if policy.stage != Policy.STAGE_NEW:
+        return 0
     if product.registration_lump_sum:
         return product.registration_lump_sum
     return f_counts["total"] * get_attr(product, 'registration_fee')
 
 
-def discount(policy):
-    from core import datetime, datetimedelta
+def discount_new(policy):
     product = policy.product
-    if product.has_enrolment_discount() and product.has_cycle() and policy.stage == Policy.STAGE_NEW:
+    if product.has_enrolment_discount() and product.has_cycle():
+        from core import datetime, datetimedelta
         min_discount_date = (
                 datetime.date.from_ad_date(policy.start_date) - datetimedelta(months=product.enrolment_discount_period)
         ).to_ad_datetime()
         if policy.enroll_date <= min_discount_date:
             policy.value -= policy.value * product.enrolment_discount_perc / 100
-    # elif policy.stage == 'R': //TODO: need the previous policy id ??
 
 
-def set_value(policy, family_id):
+def discount_renew(policy, prev_policy):
+    product = policy.product
+    if product.has_renewal_discount():
+        from core import datetime, datetimedelta
+        min_discount_date = (
+                datetime.date.from_ad_date(prev_policy.expiry_date) +
+                datetimedelta(days=1) -
+                datetimedelta(months=product.renewal_discount_period)
+        ).to_ad_datetime()
+        if policy.enroll_date <= min_discount_date:
+            policy.value -= policy.value * product.renewal_discount_perc / 100
+
+
+def discount(policy, prev_policy):
+    if policy.stage == Policy.STAGE_NEW:
+        discount_new(policy)
+    elif policy.stage == Policy.STAGE_RENEWED:
+        discount_renew(policy, prev_policy)
+
+
+def set_value(policy, family_id, prev_policy):
     product = policy.product
     f_counts = family_counts(product, family_id)
 
     contributions = sum_contributions(product, f_counts)
     general_assembly = sum_general_assemblies(product, f_counts)
-    registration = sum_registrations(product, f_counts) if policy.stage == Policy.STAGE_NEW else 0
+    registration = sum_registrations(policy, product, f_counts)
     policy.value = contributions + general_assembly + registration
-    discount(policy)
+    discount(policy, prev_policy)
 
 
-def policy_values(policy, family_id):
-    set_start_date(policy)
+def policy_values(policy, family, prev_policy):
+    set_start_date(policy, prev_policy)
     set_expiry_date(policy)
-    set_value(policy, family_id)
+    set_value(policy, family, prev_policy)
     return policy

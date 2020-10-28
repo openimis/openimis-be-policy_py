@@ -37,7 +37,7 @@ def update_or_create_policy(data, user):
         data.pop('client_mutation_id')
     if "client_mutation_label" in data:
         data.pop('client_mutation_label')
-    policy_uuid = data.pop('uuid') if 'uuid' in data else None
+    policy_uuid = data.pop('policy_uuid') if 'policy_uuid' in data else None
     # update_or_create(uuid=policy_uuid, ...)
     # doesn't work because of explicit attempt to set null to uuid!
     if policy_uuid:
@@ -49,7 +49,7 @@ def update_or_create_policy(data, user):
     policy.save()
 
 
-class CreateOrUpdatePolicyMutation(OpenIMISMutation):
+class CreateRenewOrUpdatePolicyMutation(OpenIMISMutation):
     @classmethod
     def do_mutate(cls, perms, user, **data):
         if type(user) is AnonymousUser or not user.id:
@@ -67,7 +67,7 @@ class CreateOrUpdatePolicyMutation(OpenIMISMutation):
         return None
 
 
-class CreatePolicyMutation(CreateOrUpdatePolicyMutation):
+class CreatePolicyMutation(CreateRenewOrUpdatePolicyMutation):
     _mutation_module = "policy"
     _mutation_class = "CreatePolicyMutation"
 
@@ -86,7 +86,7 @@ class CreatePolicyMutation(CreateOrUpdatePolicyMutation):
                 'detail': str(exc)}]
 
 
-class UpdatePolicyMutation(CreateOrUpdatePolicyMutation):
+class UpdatePolicyMutation(CreateRenewOrUpdatePolicyMutation):
     _mutation_module = "policy"
     _mutation_class = "UpdatePolicyMutation"
 
@@ -100,6 +100,26 @@ class UpdatePolicyMutation(CreateOrUpdatePolicyMutation):
         except Exception as exc:
             return [{
                 'message': _("policy.mutation.failed_to_update_policy"),
+                'detail': str(exc)}]
+
+
+class RenewPolicyMutation(CreateRenewOrUpdatePolicyMutation):
+    _mutation_module = "policy"
+    _mutation_class = "RenewPolicyMutation"
+
+    class Input(PolicyInputType):
+        pass
+
+    @classmethod
+    def async_mutate(cls, user, **data):
+        try:
+            # ensure we don't update the existing one, but recreate a new one!
+            if 'policy_uuid' in data:
+                data.pop('policy_uuid')
+            return cls.do_mutate(PolicyConfig.gql_mutation_edit_policies_perms, user, **data)
+        except Exception as exc:
+            return [{
+                'message': _("policy.mutation.failed_to_renew_policy"),
                 'detail': str(exc)}]
 
 
