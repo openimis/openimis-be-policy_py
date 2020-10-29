@@ -226,8 +226,8 @@ class ByFamilyService(FilteredPoliciesService):
         if by_family_request.active_or_last_expired_only:
             products = {}
             for policy in res:
-                if policy.status != Policy.STATUS_SUSPENDED and policy.status != Policy.STATUS_EXPIRED:
-                    products['policy.product.code-%s' % policy.status] = policy
+                if policy.status == Policy.STATUS_IDLE or policy.status == Policy.STATUS_READY:
+                    products['policy.product.code-%s' % policy.uuid] = policy
                 elif policy.product.code not in products.keys():
                     products[policy.product.code] = policy
             res = products.values()

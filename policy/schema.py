@@ -254,6 +254,7 @@ class Mutation(graphene.ObjectType):
     update_policy = UpdatePolicyMutation.Field()
     delete_policies = DeletePoliciesMutation.Field()
     renew_policy = RenewPolicyMutation.Field()
+    suspend_policies = SuspendPoliciesMutation.Field()
 
 
 def on_policy_mutation(sender, **kwargs):

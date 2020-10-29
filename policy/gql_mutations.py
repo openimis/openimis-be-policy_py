@@ -42,6 +42,7 @@ def update_or_create_policy(data, user):
     # doesn't work because of explicit attempt to set null to uuid!
     if policy_uuid:
         policy = Policy.objects.get(uuid=policy_uuid)
+        policy.save_history()
         reset_policy_before_update(policy)
         [setattr(policy, key, data[key]) for key in data]
     else:
@@ -118,10 +119,61 @@ class RenewPolicyMutation(CreateRenewOrUpdatePolicyMutation):
                 data.pop('policy_uuid')
             data["status"] = Policy.STATUS_IDLE
             data["stage"] = Policy.STAGE_RENEWED
-            return cls.do_mutate(PolicyConfig.gql_mutation_edit_policies_perms, user, **data)
+            return cls.do_mutate(PolicyConfig.gql_mutation_renew_policies_perms, user, **data)
         except Exception as exc:
             return [{
                 'message': _("policy.mutation.failed_to_renew_policy"),
+                'detail': str(exc)}]
+
+
+def set_policy_suspended(user, policy):
+    try:
+        policy.save_history()
+        policy.status = Policy.STATUS_SUSPENDED
+        policy.audit_user_id = user.id_for_audit
+        policy.save()
+        return []
+    except Exception as exc:
+        return {
+            'title': policy.uuid,
+            'list': [{
+                'message': _("policy.mutation.failed_to_suspend_policy") % {'uuid': policy.uuid},
+                'detail': policy.uuid}]
+        }
+
+
+class SuspendPoliciesMutation(OpenIMISMutation):
+    _mutation_module = "policy"
+    _mutation_class = "SuspendPolicyMutation"
+
+    class Input(OpenIMISMutation.Input):
+        uuids = graphene.List(graphene.String)
+
+    @classmethod
+    def async_mutate(cls, user, **data):
+        try:
+            if type(user) is AnonymousUser or not user.id:
+                raise ValidationError(
+                    _("mutation.authentication_required"))
+            if not user.has_perms(PolicyConfig.gql_mutation_suspend_policies_perms):
+                raise PermissionDenied(_("unauthorized"))
+            errors = []
+            for policy_uuid in data["uuids"]:
+                policy = Policy.objects.filter(uuid=policy_uuid).first()
+                if policy is None:
+                    errors += {
+                        'title': policy_uuid,
+                        'list': [{'message': _(
+                            "policy.mutation.id_does_not_exist") % {'id': policy_uuid}}]
+                    }
+                    continue
+                errors += set_policy_suspended(user, policy)
+            if len(errors) == 1:
+                errors = errors[0]['list']
+            return errors
+        except Exception as exc:
+            return [{
+                'message': _("policy.mutation.failed_to_suspend_policy"),
                 'detail': str(exc)}]
 
 
