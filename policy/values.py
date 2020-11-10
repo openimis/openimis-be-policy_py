@@ -1,8 +1,6 @@
-import sys
 import datetime as py_datetime
 from core.apps import CoreConfig
 from .models import Policy
-from insuree.models import Family, Insuree
 
 
 def cycle_start(product, cycle, ref_date):
@@ -38,19 +36,24 @@ def set_start_date(policy):
     for i in range(4):
         start = cycle_start(product, i, ref_date)
         if start:
-            policy.start_date = start
+            policy.start_date = datetime.date.from_ad_date(start)
             return
-    policy.start_date = py_datetime.datetime.strptime(
-        "%s-%s" % (product.start_cycle_1, ref_enroll_date.year + 1),
+    policy.start_date = datetime.date.from_ad_date(py_datetime.datetime.strptime(
+        "%s-%s" % (product.start_cycle_1, ref_date.year + 1),
         '%d-%m-%Y'
-    )
+    ))
 
 
 def set_expiry_date(policy):
+    product = policy.product
     from core import datetime, datetimedelta
+
+    insurance_period = datetimedelta(
+        months=product.insurance_period) if product.insurance_period % 12 != 0 else datetimedelta(
+        years=product.insurance_period // 12)
     policy.expiry_date = (
             datetime.date.from_ad_date(policy.start_date) +
-            datetimedelta(years=1) -
+            insurance_period -
             datetimedelta(days=1)
     ).to_ad_date()
 
