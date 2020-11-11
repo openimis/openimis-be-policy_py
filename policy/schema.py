@@ -25,7 +25,7 @@ from .values import policy_values
 
 class Query(graphene.ObjectType):
     policy_values = graphene.Field(
-        PolicyGQLType,
+        PolicyAndWarningsGQLType,
         prev_uuid=graphene.String(required=False),
         stage=graphene.String(required=True),
         enrollDate=graphene.DateTime(required=True),
@@ -98,7 +98,8 @@ class Query(graphene.ObjectType):
         prev_policy = None
         if 'prev_uuid' in kwargs:
             prev_policy = Policy.objects.get(uuid=kwargs.get('prev_uuid'))
-        return policy_values(policy, family, prev_policy)
+        policy, warnings = policy_values(policy, family, prev_policy)
+        return PolicyAndWarningsGQLType(policy=policy, warnings=warnings)
 
     def resolve_policies(self, info, **kwargs):
         if not info.context.user.has_perms(PolicyConfig.gql_query_policies_perms):

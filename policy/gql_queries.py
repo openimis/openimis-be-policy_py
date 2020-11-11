@@ -28,6 +28,11 @@ class PolicyGQLType(DjangoObjectType):
         connection_class = ExtendedConnection
 
 
+class PolicyAndWarningsGQLType(graphene.ObjectType):
+    policy = graphene.Field(PolicyGQLType)
+    warnings = graphene.List(graphene.String)
+
+
 class PolicyByFamilyOrInsureeGQLType(graphene.ObjectType):
     class Meta:
         interfaces = (graphene.relay.Node,)

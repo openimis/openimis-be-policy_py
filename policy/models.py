@@ -18,7 +18,7 @@ class Policy(core_models.VersionedModel):
     status = models.SmallIntegerField(db_column='PolicyStatus', blank=True, null=True)
     value = models.DecimalField(db_column='PolicyValue', max_digits=18, decimal_places=2, blank=True, null=True)
 
-    family = models.ForeignKey(Family, models.DO_NOTHING, db_column='FamilyID')
+    family = models.ForeignKey(Family, models.DO_NOTHING, db_column='FamilyID', related_name="policies")
     enroll_date = fields.DateField(db_column='EnrollDate')
     start_date = fields.DateField(db_column='StartDate')
     effective_date = fields.DateField(db_column='EffectiveDate', blank=True, null=True)
@@ -41,8 +41,8 @@ class Policy(core_models.VersionedModel):
     def is_new(self):
         return not self.stage or self.stage == Policy.STAGE_NEW
 
-    def label(self):
-        return "%s"
+    def can_add_insuree(self):
+        return self.family.members.filter(validity_to__isnull=True).count() < self.product.member_count
 
     class Meta:
         managed = False

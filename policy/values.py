@@ -1,3 +1,4 @@
+from django.utils.translation import gettext as _
 import datetime as py_datetime
 from core.apps import CoreConfig
 from .models import Policy
@@ -163,8 +164,7 @@ def discount(policy, prev_policy):
 
 def set_value(policy, family, prev_policy):
     product = policy.product
-    f_counts = family_counts(product, family)
-
+    f_counts = family_counts(policy.product, family)
     contributions = sum_contributions(product, f_counts)
     general_assembly = sum_general_assemblies(product, f_counts)
     registration = sum_registrations(policy, product, f_counts)
@@ -173,7 +173,13 @@ def set_value(policy, family, prev_policy):
 
 
 def policy_values(policy, family, prev_policy):
+    members = family.members.filter(validity_to__isnull=True).count()
+    max_members = policy.product.member_count
+    above_max = max(0, members - max_members)
+    warnings = []
+    if above_max:
+        warnings.append(_("policy.validation.members_count_above_max") % {'max': max_members, 'count': members})
     set_start_date(policy)
     set_expiry_date(policy)
     set_value(policy, family, prev_policy)
-    return policy
+    return policy, warnings
