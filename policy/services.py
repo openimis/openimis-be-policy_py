@@ -1,20 +1,24 @@
+import logging
 from dataclasses import dataclass
-
-from core.apps import CoreConfig
-from django.db import connection
-from django.db.models import Sum
-from django.db.models.functions import Coalesce
-from graphene.utils.str_converters import to_snake_case
 from datetime import datetime as py_datetime
-from insuree.models import Insuree, Family
-from django.db.models import Q
+
 import core
+from claim.models import ClaimService, Claim, ClaimItem
+from django import dispatch
+from django.core.exceptions import PermissionDenied
+from django.db import connection
+from django.db.models import Q, Count, Min, Max, Value
+from django.db.models import Sum, F
+from django.db.models.functions import Coalesce
 from django.template import Template, Context
+from graphene.utils.str_converters import to_snake_case
+from insuree.models import Insuree, Family, InsureePolicy
 from insuree.services import create_insuree_renewal_detail
+from medical.models import Service, Item
 from policy.apps import PolicyConfig
+from policy.utils import MonthsAdd
 
 from .models import Policy, PolicyRenewal
-import logging
 
 logger = logging.getLogger(__name__)
 
@@ -96,7 +100,6 @@ class ByInsureeResponse(object):
 
 
 class FilteredPoliciesService(object):
-
     def __init__(self, user):
         self.user = user
 
@@ -154,7 +157,6 @@ class FilteredPoliciesService(object):
 
 
 class ByInsureeService(FilteredPoliciesService):
-
     def __init__(self, user):
         super(ByInsureeService, self).__init__(user)
 
@@ -257,7 +259,6 @@ class EligibilityRequest(object):
         return isinstance(other, self.__class__) and self.__dict__ == other.__dict__
 
 
-@core.comparable
 class EligibilityResponse(object):
 
     def __init__(self, eligibility_request, prod_id=None, total_admissions_left=0, total_visits_left=0,
@@ -265,7 +266,8 @@ class EligibilityResponse(object):
                  total_deliveries_left=0, total_antenatal_left=0, consultation_amount_left=0, surgery_amount_left=0,
                  delivery_amount_left=0,
                  hospitalization_amount_left=0, antenatal_amount_left=0,
-                 min_date_service=None, min_date_item=None, service_left=0, item_left=0, is_item_ok=0, is_service_ok=0):
+                 min_date_service=None, min_date_item=None, service_left=0, item_left=0, is_item_ok=False,
+                 is_service_ok=False, final=False):
         self.eligibility_request = eligibility_request
         self.prod_id = prod_id
         self.total_admissions_left = total_admissions_left
@@ -285,26 +287,94 @@ class EligibilityResponse(object):
         self.item_left = item_left
         self.is_item_ok = is_item_ok
         self.is_service_ok = is_service_ok
+        self.final = final
 
     def __eq__(self, other):
-        return isinstance(other, self.__class__) and self.__dict__ == other.__dict__
+        if not isinstance(other, self.__class__):
+            return False
+
+        def str_none(x):
+            str(x) if x else x
+
+        # Comparison should take into account the date vs AdDate
+        return (
+                self.eligibility_request == other.eligibility_request and
+                self.prod_id == other.prod_id and
+                self.total_admissions_left == other.total_admissions_left and
+                self.total_visits_left == other.total_visits_left and
+                self.total_consultations_left == other.total_consultations_left and
+                self.total_surgeries_left == other.total_surgeries_left and
+                self.total_deliveries_left == other.total_deliveries_left and
+                self.total_antenatal_left == other.total_antenatal_left and
+                self.consultation_amount_left == other.consultation_amount_left and
+                self.surgery_amount_left == other.surgery_amount_left and
+                self.delivery_amount_left == other.delivery_amount_left and
+                self.hospitalization_amount_left == other.hospitalization_amount_left and
+                self.antenatal_amount_left == other.antenatal_amount_left and
+                str_none(self.min_date_service) == str_none(other.min_date_service) and
+                str_none(self.min_date_item) == str_none(other.min_date_item) and
+                self.service_left == other.service_left and
+                self.item_left == other.item_left and
+                self.is_item_ok == other.is_item_ok and
+                self.is_service_ok == other.is_service_ok)
+
+
+signal_eligibility_service_before = dispatch.Signal(providing_args=["user", "request", "response"])
+signal_eligibility_service_after = dispatch.Signal(providing_args=["user", "request", "response"])
 
 
 class EligibilityService(object):
+    def __init__(self, user):
+        self.user = user
+        self.service = NativeEligibilityService(user)
 
+    def request(self, request):
+        if not self.user or not self.user.has_perms(PolicyConfig.gql_query_eligibilities_perms):
+            raise PermissionDenied()
+
+        # The response is passed along in signals and functions. Setting the final parameter will stop
+        response = EligibilityResponse(eligibility_request=request)
+        responses = signal_eligibility_service_before.send(
+            self.__class__, user=self.user, request=request, response=response)
+        response = EligibilityService._get_final_response(responses, "before")
+
+        if not response.final and not PolicyConfig.default_eligibility_disabled:
+            response = self.service.request(request, response)
+
+        if not response.final:
+            responses = signal_eligibility_service_after.send(
+                self.__class__, user=self.user, request=request, response=response)
+            response = EligibilityService._get_final_response(responses, "after")
+
+        return response
+
+    @classmethod
+    def _get_final_response(cls, responses, sig_name):
+        final_responses = [r for f, r in responses if r.final]
+        if len(final_responses) > 0:
+            if len(final_responses) > 1:
+                logger.warning("Eligibility service got more than one final *%s* signal response: %s",
+                               sig_name,
+                               [f for f, r in responses if r.final])
+            return final_responses[0]
+        else:
+            return responses[-1]
+
+
+class StoredProcEligibilityService(object):
     def __init__(self, user):
         self.user = user
 
-    def request(self, req):
+    def request(self, req, response):
         with connection.cursor() as cur:
             sql = """\
                 DECLARE @MinDateService DATE, @MinDateItem DATE,
                         @ServiceLeft INT, @ItemLeft INT,
                         @isItemOK BIT, @isServiceOK BIT;
                 EXEC [dbo].[uspServiceItemEnquiry] @CHFID = %s, @ServiceCode = %s, @ItemCode = %s,
-                     @MinDateService = @MinDateService, @MinDateItem = @MinDateItem,
-                     @ServiceLeft = @ServiceLeft, @ItemLeft = @ItemLeft,
-                     @isItemOK = @isItemOK, @isServiceOK = @isServiceOK;
+                     @MinDateService = @MinDateService OUTPUT, @MinDateItem = @MinDateItem OUTPUT,
+                     @ServiceLeft = @ServiceLeft OUTPUT, @ItemLeft = @ItemLeft OUTPUT,
+                     @isItemOK = @isItemOK OUTPUT, @isServiceOK = @isServiceOK OUTPUT;
                 SELECT @MinDateService, @MinDateItem, @ServiceLeft, @ItemLeft, @isItemOK, @isServiceOK
             """
             cur.execute(sql, (req.chf_id,
@@ -312,7 +382,7 @@ class EligibilityService(object):
                               req.item_code))
             res = cur.fetchone()  # retrieve the stored proc @Result table
             if res is None:
-                return EligibilityResponse(eligibility_request=req)
+                return response
 
             (prod_id, total_admissions_left, total_visits_left, total_consultations_left, total_surgeries_left,
              total_deliveries_left, total_antenatal_left, consultation_amount_left, surgery_amount_left,
@@ -344,8 +414,251 @@ class EligibilityService(object):
             )
 
 
-def insert_renewals(date_from=None, date_to=None, officer_id=None, reminding_interval=None, location_id=None,
-                    location_levels=4):
+class NativeEligibilityService(object):
+    def __init__(self, user):
+        self.user = user
+
+    def request(self, req, response):
+        insuree = Insuree.get_queryset(None, self.user)\
+            .filter(validity_to__isnull=True)\
+            .get(chf_id=req.chf_id)  # Will throw an exception if not found
+        now = core.datetime.datetime.now()
+        eligibility = response
+
+        if req.service_code:
+            if insuree.is_adult():
+                waiting_period_field = "policy__product__products__waiting_period_adult"
+                limit_field = "policy__product__products__limit_no_adult"
+            else:
+                waiting_period_field = "policy__product__products__waiting_period_child"
+                limit_field = "policy__product__products__limit_no_child"
+
+            service = Service.get_queryset(None, self.user).get(code__iexact=req.service_code)  # TODO validity is checked but should be optional in get_queryset
+
+            # Beware that MonthAdd() is in Gregorian calendar, not Nepalese or anything else
+            queryset_svc = InsureePolicy.objects\
+                .filter(validity_to__isnull=True)\
+                .filter(policy__validity_to__isnull=True)\
+                .filter(policy__product__products__validity_to__isnull=True) \
+                .filter(policy__product__products__service_id=service.id)\
+                .filter(policy__status=Policy.STATUS_ACTIVE) \
+                .filter(insuree=insuree) \
+                .filter(insuree__claim__validity_to__isnull=True)\
+                .filter(insuree__claim__services__validity_to__isnull=True) \
+                .filter(Q(insuree__claim__status__gt=Claim.STATUS_ENTERED) | Q(insuree__claim__status__isnull=True))\
+                .filter(Q(insuree__claim__services__status=ClaimService.STATUS_PASSED)
+                        | Q(insuree__claim__services__status__isnull=True))\
+                .values("effective_date",
+                        "policy__product_id",
+                        waiting_period=F(waiting_period_field),
+                        limit_no=F(limit_field))\
+                .annotate(min_date=MonthsAdd(waiting_period_field, "effective_date"))\
+                .annotate(services_count=Count("policy__product__products__service_id"))\
+                .annotate(services_left=Coalesce("limit_no", Value(0)) - F("services_count"))
+
+            min_date_qs = queryset_svc.aggregate(
+                min_date_lte=Min("min_date", filter=Q(min_date__lte=now)),
+                min_date_all=Min("min_date"),
+            )
+            from core import datetime
+            min_date_service = datetime.date.from_ad_date(
+                min_date_qs["min_date_lte"] if min_date_qs["min_date_lte"]
+                else min_date_qs["min_date_all"])
+
+            if queryset_svc.filter(min_date__lte=now).filter(services_left__isnull=True).first():
+                services_left = None
+            else:
+                services_left = queryset_svc\
+                    .filter(Q(min_date__isnull=True) | Q(min_date__lte=now))\
+                    .aggregate(Max("services_left"))["services_left__max"]
+        else:
+            service = None
+            services_left = None
+            min_date_service = None
+        eligibility.min_date_service = min_date_service
+        eligibility.service_left = services_left or 0
+
+        # TODO remove code duplication between service and item
+        if req.item_code:
+            if insuree.is_adult():
+                waiting_period_field = "policy__product__items__waiting_period_adult"
+                limit_field = "policy__product__items__limit_no_adult"
+            else:
+                waiting_period_field = "policy__product__items__waiting_period_child"
+                limit_field = "policy__product__items__limit_no_child"
+
+            item = Item.get_queryset(None, self.user).get(code__iexact=req.item_code)  # TODO validity is checked but should be optional in get_queryset
+
+            queryset_item = InsureePolicy.objects\
+                .filter(validity_to__isnull=True)\
+                .filter(policy__validity_to__isnull=True)\
+                .filter(policy__product__items__validity_to__isnull=True) \
+                .filter(policy__product__items__item_id=item.id)\
+                .filter(policy__status=Policy.STATUS_ACTIVE) \
+                .filter(insuree=insuree) \
+                .filter(insuree__claim__validity_to__isnull=True)\
+                .filter(insuree__claim__items__validity_to__isnull=True) \
+                .filter(Q(insuree__claim__status__gt=Claim.STATUS_ENTERED) | Q(insuree__claim__status__isnull=True))\
+                .filter(Q(insuree__claim__items__status=ClaimItem.STATUS_PASSED)
+                        | Q(insuree__claim__items__status__isnull=True))\
+                .values("effective_date",
+                        "policy__product_id",
+                        waiting_period=F(waiting_period_field),
+                        limit_no=F(limit_field))\
+                .annotate(min_date=MonthsAdd(waiting_period_field, "effective_date"))\
+                .annotate(items_count=Count("policy__product__items__item_id")) \
+                .annotate(items_left=Coalesce("limit_no", Value(0)) - F("items_count"))
+
+            min_date_qs = queryset_item.aggregate(
+                min_date_lte=Min("min_date", filter=Q(min_date__lte=now)),
+                min_date_all=Min("min_date"),
+            )
+            from core import datetime
+            min_date_item = datetime.date.from_ad_date(min_date_qs["min_date_lte"]
+                                                       if min_date_qs["min_date_lte"]
+                                                       else min_date_qs["min_date_all"])
+
+            if queryset_item.filter(min_date__lte=now).filter(items_left__isnull=True).first():
+                items_left = None
+            else:
+                items_left = queryset_item\
+                    .filter(Q(min_date__isnull=True) | Q(min_date__lte=now))\
+                    .aggregate(Max("items_left"))["items_left__max"]
+        else:
+            item = None
+            items_left = None
+            min_date_item = None
+        eligibility.min_date_item = min_date_item
+        eligibility.item_left = items_left or 0
+
+        def get_total_filter(category):
+            return (
+                Q(insuree__claim__category=category)
+                & Q(insuree__validity_to__isnull=True)  # Not sure this one is necessary
+                & Q(insuree__claim__validity_to__isnull=True)
+                & Q(insuree__claim__services__validity_to__isnull=True)
+                & Q(insuree__claim__status__gt=Claim.STATUS_ENTERED)
+                & (Q(insuree__claim__services__rejection_reason=0)
+                   | Q(insuree__claim__services__rejection_reason__isnull=True))
+            )
+
+        # InsPol -> Policy -> Product -> dedrem
+        result = InsureePolicy.objects \
+            .filter(policy__product__validity_to__isnull=True) \
+            .filter(policy__validity_to__isnull=True) \
+            .filter(validity_to__isnull=True) \
+            .filter(insuree=insuree) \
+            .values("policy__product_id",
+                    "policy__product__max_no_surgery",
+                    "policy__product__max_amount_surgery",
+                    "policy__product__max_amount_consultation",
+                    "policy__product__max_amount_surgery",
+                    "policy__product__max_amount_delivery",
+                    "policy__product__max_amount_antenatal",
+                    "policy__product__max_amount_hospitalization",
+                    ) \
+            .annotate(total_admissions=Coalesce(Count("insuree__claim",
+                                                      filter=get_total_filter(Service.CATEGORY_HOSPITALIZATION),
+                                                      distinct=True), 0)) \
+            .annotate(total_admissions_left=F("policy__product__max_no_hospitalization")
+                                                     - F("total_admissions")) \
+            .annotate(total_consultations=Coalesce(Count("insuree__claim",
+                                                         filter=get_total_filter(Service.CATEGORY_CONSULTATION),
+                                                         distinct=True), 0)) \
+            .annotate(total_consultations_left=F("policy__product__max_no_consultation")
+                                                        - F("total_consultations")) \
+            .annotate(total_surgeries=Coalesce(Count("insuree__claim",
+                                                     filter=get_total_filter(Service.CATEGORY_SURGERY),
+                                                     distinct=True), 0)) \
+            .annotate(total_surgeries_left=F("policy__product__max_no_surgery") - F("total_surgeries")) \
+            .annotate(total_deliveries=Coalesce(Count("insuree__claim",
+                                                      filter=get_total_filter(Service.CATEGORY_DELIVERY),
+                                                      distinct=True), 0)) \
+            .annotate(total_deliveries_left=F("policy__product__max_no_delivery") - F("total_deliveries"))\
+            .annotate(total_antenatal=Coalesce(Count("insuree__claim",
+                                                     filter=get_total_filter(Service.CATEGORY_ANTENATAL),
+                                                     distinct=True), 0)) \
+            .annotate(total_antenatal_left=F("policy__product__max_no_antenatal") - F("total_antenatal")) \
+            .annotate(total_visits=Coalesce(Count("insuree__claim",
+                                                  filter=get_total_filter(Service.CATEGORY_VISIT),
+                                                  distinct=True), 0)) \
+            .annotate(total_visits_left=F("policy__product__max_no_visits") - F("total_visits"))\
+            .first()
+
+        eligibility.prod_id = result["policy__product_id"]
+        total_admissions_left = result["total_admissions_left"] \
+            if result["total_admissions_left"] is None or result["total_admissions_left"] >= 0 else 0
+        total_consultations_left = result["total_consultations_left"] \
+            if result["total_consultations_left"] is None or result["total_consultations_left"] >= 0 else 0
+        total_surgeries_left = result["total_surgeries_left"] \
+            if result["total_surgeries_left"] is None or result["total_surgeries_left"] >= 0 else 0
+        total_deliveries_left = result["total_deliveries_left"] \
+            if result["total_deliveries_left"] is None or result["total_deliveries_left"] >= 0 else 0
+        total_antenatal_left = result["total_antenatal_left"] \
+            if result["total_antenatal_left"] is None or result["total_antenatal_left"] >= 0 else 0
+        total_visits_left = result["total_visits_left"] \
+            if result["total_visits_left"] is None or result["total_visits_left"] >= 0 else 0
+
+        eligibility.surgery_amount_left = result["policy__product__max_amount_surgery"] or 0.0
+        eligibility.consultation_amount_left = result["policy__product__max_amount_consultation"] or 0.0
+        eligibility.delivery_amount_left = result["policy__product__max_amount_delivery"] or 0.0
+        eligibility.antenatal_amount_left = result["policy__product__max_amount_antenatal"] or 0.0
+        eligibility.hospitalization_amount_left = result["policy__product__max_amount_hospitalization"] or 0.0
+
+        if service:
+            if service.category == Service.CATEGORY_SURGERY:
+                if total_surgeries_left == 0 \
+                        or services_left == 0 \
+                        or (min_date_service and min_date_service > now) \
+                        or (result["policy__product__max_amount_surgery"] is not None
+                            and result["policy__product__max_amount_surgery"] <= 0):
+                    eligibility.is_service_ok = False
+                else:
+                    eligibility.is_service_ok = True
+            elif service.category == Service.CATEGORY_CONSULTATION:
+                if total_consultations_left == 0 \
+                        or services_left == 0 \
+                        or (min_date_service and min_date_service > now) \
+                        or (result["policy__product__max_amount_consultation"] is not None
+                            and result["policy__product__max_amount_consultation"] <= 0):
+                    eligibility.is_service_ok = False
+                else:
+                    eligibility.is_service_ok = True
+            elif service.category == Service.CATEGORY_DELIVERY:
+                if total_deliveries_left == 0 \
+                        or services_left == 0 \
+                        or (min_date_service and min_date_service > now) \
+                        or (result["policy__product__max_amount_delivery"] is not None
+                            and result["policy__product__max_amount_delivery"] <= 0):
+                    eligibility.is_service_ok = False
+                else:
+                    eligibility.is_service_ok = True
+            # Original code had a Service.CATEGORY_OTHER but with the same process as the else
+            else:
+                if services_left == 0 or (min_date_service and min_date_service > now):
+                    eligibility.is_service_ok = False
+                else:
+                    eligibility.is_service_ok = True
+        else:
+            # It is a bit weird to return is_service_ok=True when there is no service but that's how it used to work
+            eligibility.is_service_ok = True
+
+        if items_left == 0 or (min_date_item and min_date_item > now):
+            eligibility.is_item_ok = False
+        else:
+            eligibility.is_item_ok = True
+
+        # The process above uses the None type but the stored procedure service sets these to 0
+        eligibility.total_admissions_left = total_admissions_left or 0
+        eligibility.total_consultations_left = total_consultations_left or 0
+        eligibility.total_surgeries_left = total_surgeries_left or 0
+        eligibility.total_deliveries_left = total_deliveries_left or 0
+        eligibility.total_antenatal_left = total_antenatal_left or 0
+        eligibility.total_visits_left = total_visits_left or 0
+        return eligibility
+
+
+def insert_renewals(date_from=None, date_to=None, officer_id=None, reminding_interval=None, location_id=None, location_levels=4):
     if reminding_interval is None:
         reminding_interval = PolicyConfig.policy_renewal_interval
     from core import datetime
