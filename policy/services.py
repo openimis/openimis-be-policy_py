@@ -336,7 +336,7 @@ class EligibilityService(object):
         response = EligibilityResponse(eligibility_request=request)
         responses = signal_eligibility_service_before.send(
             self.__class__, user=self.user, request=request, response=response)
-        response = EligibilityService._get_final_response(responses, "before")
+        response = EligibilityService._get_final_response(responses, "before", response)
 
         if not response.final and not PolicyConfig.default_eligibility_disabled:
             response = self.service.request(request, response)
@@ -344,12 +344,14 @@ class EligibilityService(object):
         if not response.final:
             responses = signal_eligibility_service_after.send(
                 self.__class__, user=self.user, request=request, response=response)
-            response = EligibilityService._get_final_response(responses, "after")
+            response = EligibilityService._get_final_response(responses, "after", response)
 
         return response
 
     @classmethod
-    def _get_final_response(cls, responses, sig_name):
+    def _get_final_response(cls, responses, sig_name, default_response):
+        if responses is None or len(responses) == 0:
+            return default_response
         final_responses = [r for f, r in responses if r.final]
         if len(final_responses) > 0:
             if len(final_responses) > 1:
@@ -433,7 +435,8 @@ class NativeEligibilityService(object):
                 waiting_period_field = "policy__product__products__waiting_period_child"
                 limit_field = "policy__product__products__limit_no_child"
 
-            service = Service.get_queryset(None, self.user).get(code__iexact=req.service_code)  # TODO validity is checked but should be optional in get_queryset
+            # TODO validity is checked but should be optional in get_queryset
+            service = Service.get_queryset(None, self.user).get(code__iexact=req.service_code)
 
             # Beware that MonthAdd() is in Gregorian calendar, not Nepalese or anything else
             queryset_svc = InsureePolicy.objects\
