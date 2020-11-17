@@ -441,16 +441,17 @@ class NativeEligibilityService(object):
             # Beware that MonthAdd() is in Gregorian calendar, not Nepalese or anything else
             queryset_svc = InsureePolicy.objects\
                 .filter(validity_to__isnull=True)\
-                .filter(policy__validity_to__isnull=True)\
-                .filter(policy__product__products__validity_to__isnull=True) \
-                .filter(policy__product__products__service_id=service.id)\
+                .filter(policy__validity_to__isnull=True) \
+                .filter(policy__product__products__validity_to__isnull=True,
+                        policy__product__products__service_id=service.id) \
                 .filter(policy__status=Policy.STATUS_ACTIVE) \
                 .filter(insuree=insuree) \
-                .filter(insuree__claim__validity_to__isnull=True)\
-                .filter(insuree__claim__services__validity_to__isnull=True) \
-                .filter(Q(insuree__claim__status__gt=Claim.STATUS_ENTERED) | Q(insuree__claim__status__isnull=True))\
-                .filter(Q(insuree__claim__services__status=ClaimService.STATUS_PASSED)
-                        | Q(insuree__claim__services__status__isnull=True))\
+                .filter(Q(insuree__claim__validity_to__isnull=True)
+                        & Q(insuree__claim__services__validity_to__isnull=True)
+                        & (Q(insuree__claim__services__status=ClaimService.STATUS_PASSED)
+                            | Q(insuree__claim__services__status__isnull=True))
+                        & (Q(insuree__claim__status__gt=Claim.STATUS_ENTERED)
+                           | Q(insuree__claim__status__isnull=True))) \
                 .values("effective_date",
                         "policy__product_id",
                         waiting_period=F(waiting_period_field),
@@ -495,15 +496,16 @@ class NativeEligibilityService(object):
             queryset_item = InsureePolicy.objects\
                 .filter(validity_to__isnull=True)\
                 .filter(policy__validity_to__isnull=True)\
-                .filter(policy__product__items__validity_to__isnull=True) \
-                .filter(policy__product__items__item_id=item.id)\
+                .filter(policy__product__items__validity_to__isnull=True,
+                        policy__product__items__item_id=item.id) \
                 .filter(policy__status=Policy.STATUS_ACTIVE) \
                 .filter(insuree=insuree) \
-                .filter(insuree__claim__validity_to__isnull=True)\
-                .filter(insuree__claim__items__validity_to__isnull=True) \
-                .filter(Q(insuree__claim__status__gt=Claim.STATUS_ENTERED) | Q(insuree__claim__status__isnull=True))\
-                .filter(Q(insuree__claim__items__status=ClaimItem.STATUS_PASSED)
-                        | Q(insuree__claim__items__status__isnull=True))\
+                .filter(Q(insuree__claim__validity_to__isnull=True)
+                        & Q(insuree__claim__items__validity_to__isnull=True)
+                        & (Q(insuree__claim__items__status=ClaimItem.STATUS_PASSED)
+                            | Q(insuree__claim__items__status__isnull=True))
+                        & (Q(insuree__claim__status__gt=Claim.STATUS_ENTERED)
+                           | Q(insuree__claim__status__isnull=True))) \
                 .values("effective_date",
                         "policy__product_id",
                         waiting_period=F(waiting_period_field),
@@ -564,12 +566,12 @@ class NativeEligibilityService(object):
                                                       filter=get_total_filter(Service.CATEGORY_HOSPITALIZATION),
                                                       distinct=True), 0)) \
             .annotate(total_admissions_left=F("policy__product__max_no_hospitalization")
-                                                     - F("total_admissions")) \
+                                            - F("total_admissions")) \
             .annotate(total_consultations=Coalesce(Count("insuree__claim",
                                                          filter=get_total_filter(Service.CATEGORY_CONSULTATION),
                                                          distinct=True), 0)) \
             .annotate(total_consultations_left=F("policy__product__max_no_consultation")
-                                                        - F("total_consultations")) \
+                                               - F("total_consultations")) \
             .annotate(total_surgeries=Coalesce(Count("insuree__claim",
                                                      filter=get_total_filter(Service.CATEGORY_SURGERY),
                                                      distinct=True), 0)) \
@@ -577,7 +579,7 @@ class NativeEligibilityService(object):
             .annotate(total_deliveries=Coalesce(Count("insuree__claim",
                                                       filter=get_total_filter(Service.CATEGORY_DELIVERY),
                                                       distinct=True), 0)) \
-            .annotate(total_deliveries_left=F("policy__product__max_no_delivery") - F("total_deliveries"))\
+            .annotate(total_deliveries_left=F("policy__product__max_no_delivery") - F("total_deliveries")) \
             .annotate(total_antenatal=Coalesce(Count("insuree__claim",
                                                      filter=get_total_filter(Service.CATEGORY_ANTENATAL),
                                                      distinct=True), 0)) \
@@ -585,7 +587,7 @@ class NativeEligibilityService(object):
             .annotate(total_visits=Coalesce(Count("insuree__claim",
                                                   filter=get_total_filter(Service.CATEGORY_VISIT),
                                                   distinct=True), 0)) \
-            .annotate(total_visits_left=F("policy__product__max_no_visits") - F("total_visits"))\
+            .annotate(total_visits_left=F("policy__product__max_no_visits") - F("total_visits")) \
             .first()
 
         eligibility.prod_id = result["policy__product_id"]
