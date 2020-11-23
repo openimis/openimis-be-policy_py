@@ -2,16 +2,35 @@ import graphene
 from graphene_django import DjangoObjectType
 from .models import Policy
 from core import prefix_filterset, filter_validity, ExtendedConnection, ExtendedRelayConnection
+from core.schema import OfficerGQLType
+from product.schema import ProductGQLType
 
 
 class PolicyGQLType(DjangoObjectType):
+    sum_premiums = graphene.Float(source='sum_premiums')
+
     class Meta:
         model = Policy
         interfaces = (graphene.relay.Node,)
         filter_fields = {
+            "id": ["exact"],
             "uuid": ["exact"],
+            "enroll_date": ["exact", "lt", "lte", "gt", "gte"],
+            "start_date": ["exact", "lt", "lte", "gt", "gte"],
+            "effective_date": ["exact", "lt", "lte", "gt", "gte"],
+            "expiry_date": ["exact", "lt", "lte", "gt", "gte"],
+            "stage": ["exact"],
+            "status":  ["exact", "lt", "lte", "gt", "gte"],
+            "value": ["exact", "lt", "lte", "gt", "gte"],
+            **prefix_filterset("product__", ProductGQLType._meta.filter_fields),
+            **prefix_filterset("officer__", OfficerGQLType._meta.filter_fields),
         }
         connection_class = ExtendedConnection
+
+
+class PolicyAndWarningsGQLType(graphene.ObjectType):
+    policy = graphene.Field(PolicyGQLType)
+    warnings = graphene.List(graphene.String)
 
 
 class PolicyByFamilyOrInsureeGQLType(graphene.ObjectType):
@@ -29,7 +48,7 @@ class PolicyByFamilyOrInsureeGQLType(graphene.ObjectType):
     expiry_date = graphene.Date()
     officer_code = graphene.String()
     officer_name = graphene.String()
-    status = graphene.String()
+    status = graphene.Int()
     ded = graphene.Float()
     ded_in_patient = graphene.Float()
     ded_out_patient = graphene.Float()

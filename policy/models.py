@@ -18,7 +18,7 @@ class Policy(core_models.VersionedModel):
     status = models.SmallIntegerField(db_column='PolicyStatus', blank=True, null=True)
     value = models.DecimalField(db_column='PolicyValue', max_digits=18, decimal_places=2, blank=True, null=True)
 
-    family = models.ForeignKey(Family, models.DO_NOTHING, db_column='FamilyID')
+    family = models.ForeignKey(Family, models.DO_NOTHING, db_column='FamilyID', related_name="policies")
     enroll_date = fields.DateField(db_column='EnrollDate')
     start_date = fields.DateField(db_column='StartDate')
     effective_date = fields.DateField(db_column='EffectiveDate', blank=True, null=True)
@@ -32,6 +32,18 @@ class Policy(core_models.VersionedModel):
     audit_user_id = models.IntegerField(db_column='AuditUserID')
     # row_id = models.BinaryField(db_column='RowID', blank=True, null=True)
 
+    def sum_premiums(self):
+        return sum([p.amount for p in self.premiums.filter(is_photo_fee=True).all()])
+
+    def claim_ded_rems(self):
+        return self.claim_ded_rems
+
+    def is_new(self):
+        return not self.stage or self.stage == Policy.STAGE_NEW
+
+    def can_add_insuree(self):
+        return self.family.members.filter(validity_to__isnull=True).count() < self.product.member_count
+
     class Meta:
         managed = False
         db_table = 'tblPolicy'
@@ -40,6 +52,7 @@ class Policy(core_models.VersionedModel):
     STATUS_ACTIVE = 2
     STATUS_SUSPENDED = 4
     STATUS_EXPIRED = 8
+    STATUS_READY = 16
 
     STAGE_NEW = 'N'
     STAGE_RENEWED = 'R'
@@ -88,3 +101,14 @@ class PolicyRenewal(core_models.VersionedModel):
     class Meta:
         managed = False
         db_table = 'tblPolicyRenewals'
+
+
+class PolicyMutation(core_models.UUIDModel):
+    policy = models.ForeignKey(Policy, models.DO_NOTHING,
+                                 related_name='mutations')
+    mutation = models.ForeignKey(
+        core_models.MutationLog, models.DO_NOTHING, related_name='policies')
+
+    class Meta:
+        managed = True
+        db_table = "location_PolicyMutation"
