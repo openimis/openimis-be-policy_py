@@ -590,6 +590,22 @@ class NativeEligibilityService(object):
             .annotate(total_visits_left=F("policy__product__max_no_visits") - F("total_visits")) \
             .first()
 
+        if result is None:
+            eligibility.total_admissions_left = 0
+            eligibility.total_consultations_left = 0
+            eligibility.total_surgeries_left = 0
+            eligibility.total_deliveries_left = 0
+            eligibility.total_antenatal_left = 0
+            eligibility.total_visits_left = 0
+            eligibility.surgery_amount_left = 0
+            eligibility.consultation_amount_left = 0
+            eligibility.delivery_amount_left = 0
+            eligibility.antenatal_amount_left = 0
+            eligibility.hospitalization_amount_left = 0
+            eligibility.is_item_ok = False
+            eligibility.is_service_ok = False
+            return eligibility
+
         eligibility.prod_id = result["policy__product_id"]
         total_admissions_left = result["total_admissions_left"] \
             if result["total_admissions_left"] is None or result["total_admissions_left"] >= 0 else 0
