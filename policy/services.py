@@ -868,3 +868,26 @@ HOF{% endif %}
                 i_count += 1
 
     return sms_queue
+
+
+def update_insuree_policies(policy, user):
+    for member in policy.family.members.filter(validity_to__isnull=True):
+        existing_ip = InsureePolicy.objects.filter(validity_to__isnull=True, insuree=member, policy=policy).first()
+        if existing_ip:
+            existing_ip.save_history()
+        ip, ip_created = InsureePolicy.objects.filter(validity_to__isnull=True).update_or_create(
+            insuree=member, policy=policy,
+            defaults=dict(
+                enrollment_date=policy.enroll_date,
+                start_date=policy.start_date,
+                effective_date=policy.effective_date,
+                expiry_date=policy.expiry_date,
+                offline=policy.offline,
+                audit_user_id=user.id_for_audit
+            )
+        )
+        if ip_created:
+            logger.debug("Created InsureePolicy(%s) %s - %s", ip.id, member.chf_id, policy.uuid)
+        else:
+            logger.debug("Updated InsureePolicy(%s) %s - %s", ip.id, member.chf_id, policy.uuid)
+
