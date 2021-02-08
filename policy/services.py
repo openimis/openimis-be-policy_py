@@ -870,7 +870,7 @@ HOF{% endif %}
     return sms_queue
 
 
-def update_insuree_policies(policy, user):
+def update_insuree_policies(policy, audit_user_id):
     for member in policy.family.members.filter(validity_to__isnull=True):
         existing_ip = InsureePolicy.objects.filter(validity_to__isnull=True, insuree=member, policy=policy).first()
         if existing_ip:
@@ -883,7 +883,7 @@ def update_insuree_policies(policy, user):
                 effective_date=policy.effective_date,
                 expiry_date=policy.expiry_date,
                 offline=policy.offline,
-                audit_user_id=user.id_for_audit
+                audit_user_id=audit_user_id
             )
         )
         if ip_created:
@@ -891,3 +891,16 @@ def update_insuree_policies(policy, user):
         else:
             logger.debug("Updated InsureePolicy(%s) %s - %s", ip.id, member.chf_id, policy.uuid)
 
+
+def policy_status_premium_paid(policy, effective_date):
+    if PolicyConfig.activation_option == PolicyConfig.ACTIVATION_OPTION_CONTRIBUTION:
+        policy.effective_date = effective_date
+        policy.status = Policy.STATUS_ACTIVE
+    else:
+        policy.status = Policy.STATUS_READY
+
+
+def policy_status_payment_matched(policy):
+    if PolicyConfig.activation_option == PolicyConfig.ACTIVATION_OPTION_PAYMENT \
+            and policy.status == Policy.STATUS_IDLE:
+        policy.status = Policy.STATUS_ACTIVE
