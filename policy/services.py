@@ -71,6 +71,8 @@ class ByInsureeService(object):
 
     @staticmethod
     def _to_item(row):
+        ceiling_ip = (row[12] if row[12] else 0)
+        ceiling_op = (row[13] if row[13] else 0)
         return ByInsureeResponseItem(
             product_code=row[5],
             product_name=row[6],
@@ -79,9 +81,9 @@ class ByInsureeService(object):
             ded=(row[10] if row[10] else 0) + (row[11] if row[11] else 0),
             ded_in_patient=row[10] if row[10] else 0,
             ded_out_patient=row[11] if row[11] else 0,
-            ceiling=(row[12] if row[12] else 0) + (row[13] if row[13] else 0),
-            ceiling_in_patient=row[12] if row[12] else 0,
-            ceiling_out_patient=row[13] if row[13] else 0
+            ceiling=ceiling_ip + ceiling_op if row[9] == "1.1" else ceiling_ip,
+            ceiling_in_patient=ceiling_ip,
+            ceiling_out_patient=ceiling_op,
         )
 
     def request(self, by_insuree_request):
