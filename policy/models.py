@@ -32,8 +32,8 @@ class Policy(core_models.VersionedModel):
     audit_user_id = models.IntegerField(db_column='AuditUserID')
     # row_id = models.BinaryField(db_column='RowID', blank=True, null=True)
 
-    def sum_premiums(self):
-        return sum([p.amount for p in self.premiums.filter(is_photo_fee=True).all()])
+    def sum_premiums(self, photo=False):
+        return sum([p.amount for p in self.premiums.filter(is_photo_fee=photo).all()])
 
     def claim_ded_rems(self):
         return self.claim_ded_rems

@@ -1,4 +1,6 @@
 import graphene
+from policy.services import update_insuree_policies
+
 from .apps import PolicyConfig
 from core.schema import OpenIMISMutation
 from .models import Policy
@@ -48,6 +50,7 @@ def update_or_create_policy(data, user):
     else:
         policy = Policy.objects.create(**data)
     policy.save()
+    update_insuree_policies(policy, user.id_for_audit)
 
 
 class CreateRenewOrUpdatePolicyMutation(OpenIMISMutation):

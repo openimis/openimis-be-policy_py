@@ -590,6 +590,22 @@ class NativeEligibilityService(object):
             .annotate(total_visits_left=F("policy__product__max_no_visits") - F("total_visits")) \
             .first()
 
+        if result is None:
+            eligibility.total_admissions_left = 0
+            eligibility.total_consultations_left = 0
+            eligibility.total_surgeries_left = 0
+            eligibility.total_deliveries_left = 0
+            eligibility.total_antenatal_left = 0
+            eligibility.total_visits_left = 0
+            eligibility.surgery_amount_left = 0
+            eligibility.consultation_amount_left = 0
+            eligibility.delivery_amount_left = 0
+            eligibility.antenatal_amount_left = 0
+            eligibility.hospitalization_amount_left = 0
+            eligibility.is_item_ok = False
+            eligibility.is_service_ok = False
+            return eligibility
+
         eligibility.prod_id = result["policy__product_id"]
         total_admissions_left = result["total_admissions_left"] \
             if result["total_admissions_left"] is None or result["total_admissions_left"] >= 0 else 0
@@ -852,3 +868,39 @@ HOF{% endif %}
                 i_count += 1
 
     return sms_queue
+
+
+def update_insuree_policies(policy, audit_user_id):
+    for member in policy.family.members.filter(validity_to__isnull=True):
+        existing_ip = InsureePolicy.objects.filter(validity_to__isnull=True, insuree=member, policy=policy).first()
+        if existing_ip:
+            existing_ip.save_history()
+        ip, ip_created = InsureePolicy.objects.filter(validity_to__isnull=True).update_or_create(
+            insuree=member, policy=policy,
+            defaults=dict(
+                enrollment_date=policy.enroll_date,
+                start_date=policy.start_date,
+                effective_date=policy.effective_date,
+                expiry_date=policy.expiry_date,
+                offline=policy.offline,
+                audit_user_id=audit_user_id
+            )
+        )
+        if ip_created:
+            logger.debug("Created InsureePolicy(%s) %s - %s", ip.id, member.chf_id, policy.uuid)
+        else:
+            logger.debug("Updated InsureePolicy(%s) %s - %s", ip.id, member.chf_id, policy.uuid)
+
+
+def policy_status_premium_paid(policy, effective_date):
+    if PolicyConfig.activation_option == PolicyConfig.ACTIVATION_OPTION_CONTRIBUTION:
+        policy.effective_date = effective_date
+        policy.status = Policy.STATUS_ACTIVE
+    else:
+        policy.status = Policy.STATUS_READY
+
+
+def policy_status_payment_matched(policy):
+    if PolicyConfig.activation_option == PolicyConfig.ACTIVATION_OPTION_PAYMENT \
+            and policy.status == Policy.STATUS_IDLE:
+        policy.status = Policy.STATUS_ACTIVE

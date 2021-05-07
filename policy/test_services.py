@@ -189,6 +189,34 @@ class EligibilityServiceTestCase(TestCase):
         product.delete()
         insuree.delete()
 
+    def test_eligibility_stored_proc_item_no_insuree_policy(self):
+        insuree = create_test_insuree()
+        product = create_test_product("ELI1")
+        (policy, _) = create_test_policy2(
+            product, insuree, link=False, custom_props={"status": Policy.STATUS_IDLE})
+        item = create_test_item("A")
+        item_pl_detail = add_item_to_hf_pricelist(item)
+        product_item = create_test_product_item(product, item, custom_props={"limit_no_adult": 12})
+
+        sp_el_svc = StoredProcEligibilityService(self.user)
+        native_el_svc = NativeEligibilityService(self.user)
+        req = EligibilityRequest(chf_id=insuree.chf_id, item_code=item.code)
+        settings.ROW_SECURITY = False
+        sp_response = EligibilityResponse(req)
+        sp_response = sp_el_svc.request(req, sp_response)
+        native_response = EligibilityResponse(req)
+        native_response = native_el_svc.request(req, native_response)
+        self.assertIsNotNone(native_response)
+        self.assertIsNotNone(sp_response)
+        self.assertEquals(native_response, sp_response)
+
+        product_item.delete()
+        item_pl_detail.delete()
+        item.delete()
+        policy.insuree_policies.all().delete()
+        policy.delete()
+        product.delete()
+        insuree.delete()
 
     def test_eligibility_signal(self):
         insuree = create_test_insuree()
