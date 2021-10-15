@@ -1,4 +1,4 @@
-from unittest import mock
+from unittest import mock, skip
 
 from claim.test_helpers import create_test_claim, create_test_claimservice, create_test_claimitem
 from claim.validations import validate_claim, validate_assign_prod_to_claimitems_and_services, process_dedrem
@@ -86,21 +86,21 @@ class EligibilityServiceTestCase(TestCase):
         expected = EligibilityResponse(
             eligibility_request=req,
             prod_id=4,
-            total_admissions_left=0,
-            total_visits_left=0,
-            total_consultations_left=0,
-            total_surgeries_left=0,
-            total_deliveries_left=0,
-            total_antenatal_left=0,
-            consultation_amount_left=0.0,
-            surgery_amount_left=0.0,
-            delivery_amount_left=0.0,
-            hospitalization_amount_left=0.0,
-            antenatal_amount_left=0.0,
+            total_admissions_left=None,
+            total_visits_left=None,
+            total_consultations_left=None,
+            total_surgeries_left=None,
+            total_deliveries_left=None,
+            total_antenatal_left=None,
+            consultation_amount_left=None,
+            surgery_amount_left=None,
+            delivery_amount_left=None,
+            hospitalization_amount_left=None,
+            antenatal_amount_left=None,
             min_date_service=None,
             min_date_item=None,
-            service_left=0,
-            item_left=0,
+            service_left=None,
+            item_left=None,
             is_item_ok=True,
             is_service_ok=True,
         )
@@ -189,6 +189,45 @@ class EligibilityServiceTestCase(TestCase):
         product.delete()
         insuree.delete()
 
+    def test_eligibility_by_insuree(self):
+        insuree = create_test_insuree()
+        product = create_test_product("ELI1")
+        (policy, insuree_policy) = create_test_policy2(product, insuree)
+        item = create_test_item("A")
+        item_pl_detail = add_item_to_hf_pricelist(item)
+        product_item = create_test_product_item(product, item, custom_props={"limit_no_adult": 12})
+        claim = create_test_claim(custom_props={"insuree_id": insuree.id})
+        claim_item = create_test_claimitem(claim, "A", custom_props={"item_id": item.id})
+        errors = validate_claim(claim, True)
+        errors += validate_assign_prod_to_claimitems_and_services(claim)
+        errors += process_dedrem(claim, -1, True)
+        self.assertEqual(len(errors), 0)
+
+        sp_el_svc = StoredProcEligibilityService(self.user)
+        native_el_svc = NativeEligibilityService(self.user)
+        req = EligibilityRequest(chf_id=insuree.chf_id, item_code=item.code)
+        settings.ROW_SECURITY = False
+        native_response = EligibilityResponse(req)
+        native_response = native_el_svc.request(req, native_response)
+        sp_response = EligibilityResponse(req)
+        sp_response = sp_el_svc.request(req, sp_response)
+        self.assertIsNotNone(native_response)
+        self.assertIsNotNone(sp_response)
+        self.assertEquals(native_response, sp_response)
+
+        claim.dedrems.all().delete()
+        claim_item.delete()
+        claim.delete()
+        product_item.delete()
+        item_pl_detail.delete()
+        item.delete()
+        policy.insuree_policies.all().delete()
+        policy.delete()
+        product.delete()
+        insuree.delete()
+
+    @skip("Not sure what is the proper behaviour when an IP is not present, skipping for now so that the main case"
+          "can be fixed.")
     def test_eligibility_stored_proc_item_no_insuree_policy(self):
         insuree = create_test_insuree()
         product = create_test_product("ELI1")

@@ -345,6 +345,14 @@ class EligibilityResponse(object):
                 self.is_item_ok == other.is_item_ok and
                 self.is_service_ok == other.is_service_ok)
 
+    def __str__(self):
+        return f"Eligibility for {self.eligibility_request} gave product {self.prod_id} " \
+               f"with item/svc ok {self.is_item_ok}/{self.is_service_ok} " \
+               f" left: {self.item_left}/{self.service_left}"
+
+    def __repr__(self):
+        return self.__str__()
+
 
 signal_eligibility_service_before = dispatch.Signal(providing_args=["user", "request", "response"])
 signal_eligibility_service_after = dispatch.Signal(providing_args=["user", "request", "response"])
@@ -423,21 +431,21 @@ class StoredProcEligibilityService(object):
             return EligibilityResponse(
                 eligibility_request=req,
                 prod_id=prod_id or None,
-                total_admissions_left=total_admissions_left or 0,
-                total_visits_left=total_visits_left or 0,
-                total_consultations_left=total_consultations_left or 0,
-                total_surgeries_left=total_surgeries_left or 0,
-                total_deliveries_left=total_deliveries_left or 0,
-                total_antenatal_left=total_antenatal_left or 0,
-                consultation_amount_left=consultation_amount_left or 0.0,
-                surgery_amount_left=surgery_amount_left or 0.0,
-                delivery_amount_left=delivery_amount_left or 0.0,
-                hospitalization_amount_left=hospitalization_amount_left or 0.0,
-                antenatal_amount_left=antenatal_amount_left or 0.0,
+                total_admissions_left=total_admissions_left,
+                total_visits_left=total_visits_left,
+                total_consultations_left=total_consultations_left,
+                total_surgeries_left=total_surgeries_left,
+                total_deliveries_left=total_deliveries_left,
+                total_antenatal_left=total_antenatal_left,
+                consultation_amount_left=consultation_amount_left,
+                surgery_amount_left=surgery_amount_left,
+                delivery_amount_left=delivery_amount_left,
+                hospitalization_amount_left=hospitalization_amount_left,
+                antenatal_amount_left=antenatal_amount_left,
                 min_date_service=min_date_service,
                 min_date_item=min_date_item,
-                service_left=service_left or 0,
-                item_left=item_left or 0,
+                service_left=service_left,
+                item_left=item_left,
                 is_item_ok=is_item_ok is True,
                 is_service_ok=is_service_ok is True
             )
@@ -483,9 +491,9 @@ class NativeEligibilityService(object):
                         "policy__product_id",
                         waiting_period=F(waiting_period_field),
                         limit_no=F(limit_field))\
-                .annotate(min_date=MonthsAdd(waiting_period_field, "effective_date"))\
+                .annotate(min_date=MonthsAdd(Coalesce(F(waiting_period_field), 0), "effective_date"))\
                 .annotate(services_count=Count("policy__product__products__service_id"))\
-                .annotate(services_left=Coalesce("limit_no", Value(0)) - F("services_count"))
+                .annotate(services_left=F("limit_no") - F("services_count"))
 
             min_date_qs = queryset_svc.aggregate(
                 min_date_lte=Min("min_date", filter=Q(min_date__lte=now)),
@@ -507,7 +515,7 @@ class NativeEligibilityService(object):
             services_left = None
             min_date_service = None
         eligibility.min_date_service = min_date_service
-        eligibility.service_left = services_left or 0
+        eligibility.service_left = services_left
 
         # TODO remove code duplication between service and item
         if req.item_code:
@@ -518,7 +526,7 @@ class NativeEligibilityService(object):
                 waiting_period_field = "policy__product__items__waiting_period_child"
                 limit_field = "policy__product__items__limit_no_child"
 
-            item = Item.get_queryset(None, self.user).get(code__iexact=req.item_code)  # TODO validity is checked but should be optional in get_queryset
+            item = Item.get_queryset(None, self.user).get(code__iexact=req.item_code)
 
             queryset_item = InsureePolicy.objects\
                 .filter(validity_to__isnull=True)\
@@ -537,9 +545,9 @@ class NativeEligibilityService(object):
                         "policy__product_id",
                         waiting_period=F(waiting_period_field),
                         limit_no=F(limit_field))\
-                .annotate(min_date=MonthsAdd(waiting_period_field, "effective_date"))\
+                .annotate(min_date=MonthsAdd(Coalesce(F(waiting_period_field), 0), "effective_date"))\
                 .annotate(items_count=Count("policy__product__items__item_id")) \
-                .annotate(items_left=Coalesce("limit_no", Value(0)) - F("items_count"))
+                .annotate(items_left=F("limit_no") - F("items_count"))
 
             min_date_qs = queryset_item.aggregate(
                 min_date_lte=Min("min_date", filter=Q(min_date__lte=now)),
@@ -561,7 +569,7 @@ class NativeEligibilityService(object):
             items_left = None
             min_date_item = None
         eligibility.min_date_item = min_date_item
-        eligibility.item_left = items_left or 0
+        eligibility.item_left = items_left
 
         def get_total_filter(category):
             return (
@@ -647,11 +655,11 @@ class NativeEligibilityService(object):
         total_visits_left = result["total_visits_left"] \
             if result["total_visits_left"] is None or result["total_visits_left"] >= 0 else 0
 
-        eligibility.surgery_amount_left = result["policy__product__max_amount_surgery"] or 0.0
-        eligibility.consultation_amount_left = result["policy__product__max_amount_consultation"] or 0.0
-        eligibility.delivery_amount_left = result["policy__product__max_amount_delivery"] or 0.0
-        eligibility.antenatal_amount_left = result["policy__product__max_amount_antenatal"] or 0.0
-        eligibility.hospitalization_amount_left = result["policy__product__max_amount_hospitalization"] or 0.0
+        eligibility.surgery_amount_left = result["policy__product__max_amount_surgery"]
+        eligibility.consultation_amount_left = result["policy__product__max_amount_consultation"]
+        eligibility.delivery_amount_left = result["policy__product__max_amount_delivery"]
+        eligibility.antenatal_amount_left = result["policy__product__max_amount_antenatal"]
+        eligibility.hospitalization_amount_left = result["policy__product__max_amount_hospitalization"]
 
         if service:
             if service.category == Service.CATEGORY_SURGERY:
@@ -697,12 +705,12 @@ class NativeEligibilityService(object):
             eligibility.is_item_ok = True
 
         # The process above uses the None type but the stored procedure service sets these to 0
-        eligibility.total_admissions_left = total_admissions_left or 0
-        eligibility.total_consultations_left = total_consultations_left or 0
-        eligibility.total_surgeries_left = total_surgeries_left or 0
-        eligibility.total_deliveries_left = total_deliveries_left or 0
-        eligibility.total_antenatal_left = total_antenatal_left or 0
-        eligibility.total_visits_left = total_visits_left or 0
+        eligibility.total_admissions_left = total_admissions_left
+        eligibility.total_consultations_left = total_consultations_left
+        eligibility.total_surgeries_left = total_surgeries_left
+        eligibility.total_deliveries_left = total_deliveries_left
+        eligibility.total_antenatal_left = total_antenatal_left
+        eligibility.total_visits_left = total_visits_left
         return eligibility
 
 
