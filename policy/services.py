@@ -105,6 +105,33 @@ class FilteredPoliciesService(object):
 
     @staticmethod
     def _to_item(row):
+        ceiling = None
+        ceiling_ip = None
+        ceiling_op = None
+        if row.product.max_treatment:
+            ceiling = row.product.max_treatment
+        if row.product.max_ip_treatment:
+            ceiling_ip = row.product.max_ip_treatment
+        if row.product.max_op_treatment:
+            ceiling_op = row.product.max_ip_treatment
+        if row.product.max_insuree:
+            ceiling = row.product.max_insuree - (row.total_rem_g if row.total_rem_g else 0)
+        else:
+            if row.product.max_ip_insuree:
+                ceiling_ip = row.product.max_ip_insuree - (row.total_rem_ip if row.total_rem_ip else 0)
+            if row.product.max_op_insuree:
+                ceiling_op = row.product.max_op_insuree - (row.total_rem_op if row.total_rem_op else 0)
+        if row.product.max_policy:
+            ceiling = row.product.max_policy - (row.total_rem_g if row.total_rem_g else 0)
+        else:
+            if row.product.max_ip_policy:
+                ceiling_ip = row.product.max_ip_policy - (row.total_rem_ip if row.total_rem_ip else 0)
+            if row.product.max_op_policy:
+                ceiling_op = row.product.max_op_policy - (row.total_rem_op if row.total_rem_op else 0)
+        balance = row.value
+        if row.total_ded_g:
+            balance -= row.total_ded_g
+
         return ByFamilyOrInsureeResponseItem(
             policy_id=row.id,
             policy_uuid=row.uuid,
@@ -121,10 +148,10 @@ class FilteredPoliciesService(object):
             ded=row.total_ded_g,
             ded_in_patient=row.total_ded_ip,
             ded_out_patient=row.total_ded_op,
-            ceiling=0,  # TODO: product.xxx
-            ceiling_in_patient=0,  # TODO: product.xxx
-            ceiling_out_patient=0,  # TODO: product.xxx
-            balance=0,  # TODO: nullsafe calculation from value,...
+            ceiling=ceiling,
+            ceiling_in_patient=ceiling_ip,
+            ceiling_out_patient=ceiling_op,
+            balance=balance,
             validity_from=row.validity_from,
             validity_to=row.validity_to
         )
