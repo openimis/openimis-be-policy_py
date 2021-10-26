@@ -1,4 +1,7 @@
-from core.schema import OrderedDjangoFilterConnectionField
+from core.schema import (
+    OrderedDjangoFilterConnectionField,
+    signal_mutation_module_validate,
+)
 import graphene
 from django.core.exceptions import PermissionDenied
 from django.db.models import Prefetch
