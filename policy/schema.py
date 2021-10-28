@@ -1,3 +1,7 @@
+from core.schema import (
+    OrderedDjangoFilterConnectionField,
+    signal_mutation_module_validate,
+)
 import graphene
 from django.core.exceptions import PermissionDenied
 from django.db.models import Prefetch
@@ -9,7 +13,7 @@ from .apps import PolicyConfig
 from django.utils.translation import gettext as _
 import graphene_django_optimizer as gql_optimizer
 from graphene_django.filter import DjangoFilterConnectionField
-from core.schema import signal_mutation_module_validate, OrderedDjangoFilterConnectionField
+from core.models import Officer
 from .models import PolicyMutation
 from product.models import Product
 from contribution.models import Premium
@@ -78,7 +82,9 @@ class Query(graphene.ObjectType):
         chfId=graphene.String(required=True),
         serviceCode=graphene.String(required=True),
     )
-    policy_officers = DjangoFilterConnectionField(OfficerGQLType)
+    policy_officers = DjangoFilterConnectionField(
+        OfficerGQLType, search=graphene.String()
+    )
 
     def resolve_policy_values(self, info, **kwargs):
         product = Product.objects.get(id=kwargs.get('product_id'))
@@ -245,9 +251,21 @@ class Query(graphene.ObjectType):
             req=req
         )
 
-    def resolve_policy_officers(self, info, **kwargs):
-        if not info.context.user.has_perms(PolicyConfig.gql_query_policy_officers_perms):
+    def resolve_policy_officers(self, info, search=None, **kwargs):
+        if not info.context.user.has_perms(
+            PolicyConfig.gql_query_policy_officers_perms
+        ):
             raise PermissionDenied(_("unauthorized"))
+
+        qs = Officer.objects
+        if search is not None:
+            qs = qs.filter(
+                Q(code__icontains=search)
+                | Q(last_name__icontains=search)
+                | Q(other_names__icontains=search)
+            )
+
+        return qs
 
 
 class Mutation(graphene.ObjectType):
