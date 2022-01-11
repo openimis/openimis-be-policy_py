@@ -464,11 +464,11 @@ class NativeEligibilityService(object):
 
         if req.service_code:
             if insuree.is_adult():
-                waiting_period_field = "policy__product__products__waiting_period_adult"
-                limit_field = "policy__product__products__limit_no_adult"
+                waiting_period_field = "policy__product__services__waiting_period_adult"
+                limit_field = "policy__product__services__limit_no_adult"
             else:
-                waiting_period_field = "policy__product__products__waiting_period_child"
-                limit_field = "policy__product__products__limit_no_child"
+                waiting_period_field = "policy__product__services__waiting_period_child"
+                limit_field = "policy__product__services__limit_no_child"
 
             # TODO validity is checked but should be optional in get_queryset
             service = Service.get_queryset(None, self.user).get(code__iexact=req.service_code)
@@ -477,8 +477,8 @@ class NativeEligibilityService(object):
             queryset_svc = InsureePolicy.objects\
                 .filter(validity_to__isnull=True)\
                 .filter(policy__validity_to__isnull=True) \
-                .filter(policy__product__products__validity_to__isnull=True,
-                        policy__product__products__service_id=service.id) \
+                .filter(policy__product__services__validity_to__isnull=True,
+                        policy__product__services__service_id=service.id) \
                 .filter(policy__status=Policy.STATUS_ACTIVE) \
                 .filter(insuree=insuree) \
                 .filter(Q(insuree__claim__validity_to__isnull=True)
@@ -492,7 +492,7 @@ class NativeEligibilityService(object):
                         waiting_period=F(waiting_period_field),
                         limit_no=F(limit_field))\
                 .annotate(min_date=MonthsAdd(Coalesce(F(waiting_period_field), 0), "effective_date"))\
-                .annotate(services_count=Count("policy__product__products__service_id"))\
+                .annotate(services_count=Count("policy__product__services__service_id"))\
                 .annotate(services_left=F("limit_no") - F("services_count"))
 
             min_date_qs = queryset_svc.aggregate(
