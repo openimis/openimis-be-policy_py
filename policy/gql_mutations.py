@@ -51,6 +51,7 @@ def update_or_create_policy(data, user):
         policy = Policy.objects.create(**data)
     policy.save()
     update_insuree_policies(policy, user.id_for_audit)
+    return policy
 
 
 class CreateRenewOrUpdatePolicyMutation(OpenIMISMutation):
