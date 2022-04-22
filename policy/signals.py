@@ -21,4 +21,7 @@ def on_policy_create_or_update(**kwargs):
     if policy:
         if policy.status in [Policy.STATUS_IDLE, Policy.STATUS_ACTIVE]:
             user = User.objects.filter(i_user__id=policy.audit_user_id).first()
+            # run calcrule for Invoice if there is valid rule
+            run_calculation_rules(policy, "PolicyCreatedInvoice", user)
+            # run calcrule for creating Bill if there is valid rule
             run_calculation_rules(policy, "PolicyCreated", user)
