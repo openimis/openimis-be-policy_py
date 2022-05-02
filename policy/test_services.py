@@ -31,51 +31,49 @@ class EligibilityServiceTestCase(TestCase):
                 service.request(req)
             mock_user.has_perms.assert_called_with(PolicyConfig.gql_query_eligibilities_perms)
 
-    def test_eligibility_request_all_good(self):
-        with mock.patch("django.db.backends.utils.CursorWrapper") as mock_cursor:
-            return_values = [
-                list(range(1, 13)),
-                [
-                    core.datetime.date(2020, 1, 9),
-                    core.datetime.date(2020, 1, 10),
-                    20,
-                    21,
-                    True,
-                    True,
-                ],
-            ][::-1]
+    @mock.patch('django.db.connections')
+    def test_eligibility_request_all_good(self, mock_connections):
+        return_values = [
+                            list(range(1, 13)),
+                            [
+                                core.datetime.date(2020, 1, 9),
+                                core.datetime.date(2020, 1, 10),
+                                20,
+                                21,
+                                True,
+                                True,
+                            ],
+                        ][::-1]
+        mock_connections.__getitem__.return_value.cursor.return_value \
+            .__enter__.return_value.fetchone = (lambda: return_values.pop())
+        mock_user = mock.Mock(is_anonymous=False)
+        mock_user.has_perm = mock.MagicMock(return_value=True)
+        req = EligibilityRequest(chf_id="a")
+        service = StoredProcEligibilityService(mock_user)
+        res = service.request(req, EligibilityResponse(req))
 
-            mock_cursor.return_value.__enter__.return_value.fetchone = (
-                lambda: return_values.pop()
-            )
-            mock_user = mock.Mock(is_anonymous=False)
-            mock_user.has_perm = mock.MagicMock(return_value=True)
-            req = EligibilityRequest(chf_id="a")
-            service = StoredProcEligibilityService(mock_user)
-            res = service.request(req, EligibilityResponse(req))
-
-            expected = EligibilityResponse(
-                eligibility_request=req,
-                prod_id=1,
-                total_admissions_left=2,
-                total_visits_left=3,
-                total_consultations_left=4,
-                total_surgeries_left=5,
-                total_deliveries_left=6,
-                total_antenatal_left=7,
-                consultation_amount_left=8,
-                surgery_amount_left=9,
-                delivery_amount_left=10,
-                hospitalization_amount_left=11,
-                antenatal_amount_left=12,
-                min_date_service=core.datetime.date(2020, 1, 9),
-                min_date_item=core.datetime.date(2020, 1, 10),
-                service_left=20,
-                item_left=21,
-                is_item_ok=True,
-                is_service_ok=True,
-            )
-            self.assertEquals(expected, res)
+        expected = EligibilityResponse(
+            eligibility_request=req,
+            prod_id=1,
+            total_admissions_left=2,
+            total_visits_left=3,
+            total_consultations_left=4,
+            total_surgeries_left=5,
+            total_deliveries_left=6,
+            total_antenatal_left=7,
+            consultation_amount_left=8,
+            surgery_amount_left=9,
+            delivery_amount_left=10,
+            hospitalization_amount_left=11,
+            antenatal_amount_left=12,
+            min_date_service=core.datetime.date(2020, 1, 9),
+            min_date_item=core.datetime.date(2020, 1, 10),
+            service_left=20,
+            item_left=21,
+            is_item_ok=True,
+            is_service_ok=True,
+        )
+        self.assertEquals(expected, res)
 
     def test_eligibility_sp_call(self):
         mock_user = mock.Mock(is_anonymous=False)
