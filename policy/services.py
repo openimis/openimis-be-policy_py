@@ -7,7 +7,7 @@ from claim.models import ClaimService, Claim, ClaimItem
 from django import dispatch
 from django.core.exceptions import PermissionDenied
 from django.db import connection
-from django.db.models import Q, Count, Min, Max, Value
+from django.db.models import Q, Count, Min, Max
 from django.db.models import Sum, F
 from django.db.models.functions import Coalesce
 from django.template import Template, Context
