@@ -55,6 +55,11 @@ class PolicyService:
             [setattr(policy, key, data[key]) for key in data]
         else:
             policy = Policy.objects.create(**data)
+            # If a policy has a value of 0 it means that this policy is free
+            # we activate the policy immediatelly
+            if data['value'] == 0:
+                setattr(policy, "status",2)
+
         policy.save()
         update_insuree_policies(policy, user.id_for_audit)
         return policy
@@ -970,6 +975,7 @@ HOF{% endif %}
 
 
 def update_insuree_policies(policy, audit_user_id):
+    print("Member Update Insuree policies")
     for member in policy.family.members.filter(validity_to__isnull=True):
         existing_ip = InsureePolicy.objects.filter(validity_to__isnull=True, insuree=member, policy=policy).first()
         if existing_ip:
