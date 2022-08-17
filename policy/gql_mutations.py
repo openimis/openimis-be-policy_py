@@ -49,6 +49,9 @@ def update_or_create_policy(data, user):
         [setattr(policy, key, data[key]) for key in data]
     else:
         policy = Policy.objects.create(**data)
+        print("polcy Creation")
+        print(data)
+
     policy.save()
     update_insuree_policies(policy, user.id_for_audit)
 
