@@ -57,8 +57,9 @@ class PolicyService:
             policy = Policy.objects.create(**data)
             # If a policy has a value of 0 it means that this policy is free
             # we activate the policy immediatelly
-            if data['value'] == 0:
+            if data['value'] == 10000:
                 setattr(policy, "status",2)
+                setattr(policy, "effective_date", data['start_date'])
 
         policy.save()
         update_insuree_policies(policy, user.id_for_audit)
