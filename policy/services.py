@@ -7,7 +7,7 @@ from claim.models import ClaimService, Claim, ClaimItem
 from django import dispatch
 from django.core.exceptions import PermissionDenied
 from django.db import connection
-from django.db.models import Q, Count, Min, Max
+from django.db.models import Q, Count, Min, Max, Value
 from django.db.models import Sum, F
 from django.db.models.functions import Coalesce
 from django.template import Template, Context
@@ -41,23 +41,38 @@ class PolicyService:
 
     @register_service_signal('policy_service.create_or_update')
     def update_or_create(self, data, user):
+        policy_uuid = data.get('policy_uuid', None)
+        if policy_uuid:
+            return self.update_policy(data, user)
+        else:
+            return self.create_policy(data, user)
+
+    @register_service_signal('policy_service.update')
+    def update_policy(self, data, user):
+        data = self._clean_mutation_info(data)
+        policy_uuid = data.pop('policy_uuid') if 'policy_uuid' in data else None
+        policy = Policy.objects.get(uuid=policy_uuid)
+        policy.save_history()
+        reset_policy_before_update(policy)
+        [setattr(policy, key, data[key]) for key in data]
+        policy.save()
+        update_insuree_policies(policy, user.id_for_audit)
+        return policy
+
+    @register_service_signal('policy_service.create')
+    def create_policy(self, data, user):
+        data = self._clean_mutation_info(data)
+        policy = Policy.objects.create(**data)
+        policy.save()
+        update_insuree_policies(policy, user.id_for_audit)
+        return policy
+
+    def _clean_mutation_info(self, data):
         if "client_mutation_id" in data:
             data.pop('client_mutation_id')
         if "client_mutation_label" in data:
             data.pop('client_mutation_label')
-        policy_uuid = data.pop('policy_uuid') if 'policy_uuid' in data else None
-        # update_or_create(uuid=policy_uuid, ...)
-        # doesn't work because of explicit attempt to set null to uuid!
-        if policy_uuid:
-            policy = Policy.objects.get(uuid=policy_uuid)
-            policy.save_history()
-            reset_policy_before_update(policy)
-            [setattr(policy, key, data[key]) for key in data]
-        else:
-            policy = Policy.objects.create(**data)
-        policy.save()
-        update_insuree_policies(policy, user.id_for_audit)
-        return policy
+        return data
 
     def set_suspended(self, user, policy):
         try:
