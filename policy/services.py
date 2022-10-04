@@ -11,7 +11,9 @@ from django.db.models import Q, Count, Min, Max, Value
 from django.db.models import Sum, F
 from django.db.models.functions import Coalesce
 from django.template import Template, Context
+from django.utils.translation import gettext as _
 from graphene.utils.str_converters import to_snake_case
+from core.signals import register_service_signal
 from insuree.models import Insuree, Family, InsureePolicy
 from insuree.services import create_insuree_renewal_detail
 from medical.models import Service, Item
@@ -21,6 +23,68 @@ from policy.utils import MonthsAdd
 from .models import Policy, PolicyRenewal
 
 logger = logging.getLogger(__name__)
+
+
+def reset_policy_before_update(policy):
+    policy.enroll_date = None
+    policy.start_date = None
+    policy.expiry_date = None
+    policy.value = None
+    policy.product_id = None
+    policy.family_id = None
+    policy.officer_id = None
+
+
+class PolicyService:
+    def __init__(self, user):
+        self.user = user
+
+    @register_service_signal('policy_service.create_or_update')
+    def update_or_create(self, data, user):
+        if "client_mutation_id" in data:
+            data.pop('client_mutation_id')
+        if "client_mutation_label" in data:
+            data.pop('client_mutation_label')
+        policy_uuid = data.pop('policy_uuid') if 'policy_uuid' in data else None
+        # update_or_create(uuid=policy_uuid, ...)
+        # doesn't work because of explicit attempt to set null to uuid!
+        if policy_uuid:
+            policy = Policy.objects.get(uuid=policy_uuid)
+            policy.save_history()
+            reset_policy_before_update(policy)
+            [setattr(policy, key, data[key]) for key in data]
+        else:
+            policy = Policy.objects.create(**data)
+        policy.save()
+        update_insuree_policies(policy, user.id_for_audit)
+        return policy
+
+    def set_suspended(self, user, policy):
+        try:
+            policy.save_history()
+            policy.status = Policy.STATUS_SUSPENDED
+            policy.audit_user_id = user.id_for_audit
+            policy.save()
+            return []
+        except Exception as exc:
+            return {
+                'title': policy.uuid,
+                'list': [{
+                    'message': _("policy.mutation.failed_to_suspend_policy") % {'uuid': policy.uuid},
+                    'detail': policy.uuid}]
+            }
+
+    def set_deleted(self, policy):
+        try:
+            policy.delete_history()
+            return []
+        except Exception as exc:
+            return {
+                'title': policy.uuid,
+                'list': [{
+                    'message': _("policy.mutation.failed_to_change_status_of_policy") % {'policy': str(policy)},
+                    'detail': policy.uuid}]
+            }
 
 
 @core.comparable
@@ -464,11 +528,11 @@ class NativeEligibilityService(object):
 
         if req.service_code:
             if insuree.is_adult():
-                waiting_period_field = "policy__product__products__waiting_period_adult"
-                limit_field = "policy__product__products__limit_no_adult"
+                waiting_period_field = "policy__product__services__waiting_period_adult"
+                limit_field = "policy__product__services__limit_no_adult"
             else:
-                waiting_period_field = "policy__product__products__waiting_period_child"
-                limit_field = "policy__product__products__limit_no_child"
+                waiting_period_field = "policy__product__services__waiting_period_child"
+                limit_field = "policy__product__services__limit_no_child"
 
             # TODO validity is checked but should be optional in get_queryset
             service = Service.get_queryset(None, self.user).get(code__iexact=req.service_code)
@@ -477,8 +541,8 @@ class NativeEligibilityService(object):
             queryset_svc = InsureePolicy.objects\
                 .filter(validity_to__isnull=True)\
                 .filter(policy__validity_to__isnull=True) \
-                .filter(policy__product__products__validity_to__isnull=True,
-                        policy__product__products__service_id=service.id) \
+                .filter(policy__product__services__validity_to__isnull=True,
+                        policy__product__services__service_id=service.id) \
                 .filter(policy__status=Policy.STATUS_ACTIVE) \
                 .filter(insuree=insuree) \
                 .filter(Q(insuree__claim__validity_to__isnull=True)
@@ -492,7 +556,7 @@ class NativeEligibilityService(object):
                         waiting_period=F(waiting_period_field),
                         limit_no=F(limit_field))\
                 .annotate(min_date=MonthsAdd(Coalesce(F(waiting_period_field), 0), "effective_date"))\
-                .annotate(services_count=Count("policy__product__products__service_id"))\
+                .annotate(services_count=Count("policy__product__services__service_id"))\
                 .annotate(services_left=F("limit_no") - F("services_count"))
 
             min_date_qs = queryset_svc.aggregate(
