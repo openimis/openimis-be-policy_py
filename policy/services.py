@@ -1,6 +1,6 @@
 import logging
 from dataclasses import dataclass
-from datetime import datetime as py_datetime
+from datetime import datetime as py_datetime, date as py_date
 
 import core
 from claim.models import ClaimService, Claim, ClaimItem
@@ -256,7 +256,7 @@ class FilteredPoliciesService(object):
             res = res.filter(*core.filter_validity())
         if req.active_or_last_expired_only:
             # sort on status, so that any active policy (status = 2) pops up...
-            res = res.annotate(not_null_expiry_date=Coalesce('expiry_date', py_datetime.max)) \
+            res = res.annotate(not_null_expiry_date=Coalesce('expiry_date', py_date.max)) \
                 .annotate(not_null_validity_to=Coalesce('validity_to', py_datetime.max)) \
                 .order_by('product__code', 'status', '-not_null_expiry_date', '-not_null_validity_to', '-validity_from')
         return res
