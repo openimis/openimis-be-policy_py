@@ -248,7 +248,7 @@ class FilteredPoliciesService(object):
         if req.active_or_last_expired_only:
             # sort on status, so that any active policy (status = 2) pops up...
             res = res.annotate(not_null_expiry_date=Coalesce('expiry_date', py_date.max)) \
-                .annotate(not_null_validity_to=Coalesce('validity_to', py_date.max)) \
+                .annotate(not_null_validity_to=Coalesce('validity_to', py_datetime.max)) \
                 .order_by('product__code', 'status', '-not_null_expiry_date', '-not_null_validity_to', '-validity_from')
         return res
 
