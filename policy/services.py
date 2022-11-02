@@ -41,29 +41,43 @@ class PolicyService:
 
     @register_service_signal('policy_service.create_or_update')
     def update_or_create(self, data, user):
+        policy_uuid = data.get('policy_uuid', None)
+        if policy_uuid:
+            return self.update_policy(data, user)
+        else:
+            return self.create_policy(data, user)
+
+    @register_service_signal('policy_service.update')
+    def update_policy(self, data, user):
+        data = self._clean_mutation_info(data)
+        policy_uuid = data.pop('policy_uuid') if 'policy_uuid' in data else None
+        policy = Policy.objects.get(uuid=policy_uuid)
+        policy.save_history()
+        reset_policy_before_update(policy)
+        [setattr(policy, key, data[key]) for key in data]
+        policy.save()
+        update_insuree_policies(policy, user.id_for_audit)
+        return policy
+
+    @register_service_signal('policy_service.create')
+    def create_policy(self, data, user):
+        data = self._clean_mutation_info(data)
+        policy = Policy.objects.create(**data)
+        # If a policy has a value of 0 it means that this policy is free
+        # we activate the policy immediatelly
+        if data['value'] == 0:
+            setattr(policy, "status",2)
+            setattr(policy, "effective_date", data['start_date'])
+        policy.save()
+        update_insuree_policies(policy, user.id_for_audit)
+        return policy
+
+    def _clean_mutation_info(self, data):
         if "client_mutation_id" in data:
             data.pop('client_mutation_id')
         if "client_mutation_label" in data:
             data.pop('client_mutation_label')
-        policy_uuid = data.pop('policy_uuid') if 'policy_uuid' in data else None
-        # update_or_create(uuid=policy_uuid, ...)
-        # doesn't work because of explicit attempt to set null to uuid!
-        if policy_uuid:
-            policy = Policy.objects.get(uuid=policy_uuid)
-            policy.save_history()
-            reset_policy_before_update(policy)
-            [setattr(policy, key, data[key]) for key in data]
-        else:
-            policy = Policy.objects.create(**data)
-            # If a policy has a value of 0 it means that this policy is free
-            # we activate the policy immediatelly
-            if data['value'] == 0:
-                setattr(policy, "status",2)
-                setattr(policy, "effective_date", data['start_date'])
-
-        policy.save()
-        update_insuree_policies(policy, user.id_for_audit)
-        return policy
+        return data
 
     def set_suspended(self, user, policy):
         try:
