@@ -41,7 +41,7 @@ class PolicyService:
 
     @register_service_signal('policy_service.create_or_update')
     def update_or_create(self, data, user):
-        policy_uuid = data.get('policy_uuid', None)
+        policy_uuid = data.get('uuid', None)
         if policy_uuid:
             return self.update_policy(data, user)
         else:
@@ -50,7 +50,7 @@ class PolicyService:
     @register_service_signal('policy_service.update')
     def update_policy(self, data, user):
         data = self._clean_mutation_info(data)
-        policy_uuid = data.pop('policy_uuid') if 'policy_uuid' in data else None
+        policy_uuid = data.pop('uuid') if 'uuid' in data else None
         policy = Policy.objects.get(uuid=policy_uuid)
         policy.save_history()
         reset_policy_before_update(policy)
