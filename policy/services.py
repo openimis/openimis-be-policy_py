@@ -1,6 +1,6 @@
 import logging
 from dataclasses import dataclass
-from datetime import datetime as py_datetime
+from datetime import datetime as py_datetime, date as py_date
 
 import core
 from claim.models import ClaimService, Claim, ClaimItem
@@ -41,23 +41,38 @@ class PolicyService:
 
     @register_service_signal('policy_service.create_or_update')
     def update_or_create(self, data, user):
+        policy_uuid = data.get('uuid', None)
+        if policy_uuid:
+            return self.update_policy(data, user)
+        else:
+            return self.create_policy(data, user)
+
+    @register_service_signal('policy_service.update')
+    def update_policy(self, data, user):
+        data = self._clean_mutation_info(data)
+        policy_uuid = data.pop('uuid') if 'uuid' in data else None
+        policy = Policy.objects.get(uuid=policy_uuid)
+        policy.save_history()
+        reset_policy_before_update(policy)
+        [setattr(policy, key, data[key]) for key in data]
+        policy.save()
+        update_insuree_policies(policy, user.id_for_audit)
+        return policy
+
+    @register_service_signal('policy_service.create')
+    def create_policy(self, data, user):
+        data = self._clean_mutation_info(data)
+        policy = Policy.objects.create(**data)
+        policy.save()
+        update_insuree_policies(policy, user.id_for_audit)
+        return policy
+
+    def _clean_mutation_info(self, data):
         if "client_mutation_id" in data:
             data.pop('client_mutation_id')
         if "client_mutation_label" in data:
             data.pop('client_mutation_label')
-        policy_uuid = data.pop('policy_uuid') if 'policy_uuid' in data else None
-        # update_or_create(uuid=policy_uuid, ...)
-        # doesn't work because of explicit attempt to set null to uuid!
-        if policy_uuid:
-            policy = Policy.objects.get(uuid=policy_uuid)
-            policy.save_history()
-            reset_policy_before_update(policy)
-            [setattr(policy, key, data[key]) for key in data]
-        else:
-            policy = Policy.objects.create(**data)
-        policy.save()
-        update_insuree_policies(policy, user.id_for_audit)
-        return policy
+        return data
 
     def set_suspended(self, user, policy):
         try:
@@ -206,8 +221,8 @@ class FilteredPoliciesService(object):
             enroll_date=row.enroll_date,
             effective_date=row.effective_date,
             expiry_date=row.expiry_date,
-            officer_code=row.officer.code,
-            officer_name=row.officer.name(),
+            officer_code=row.officer.code if row.officer else None,
+            officer_name=row.officer.name() if row.officer else None,
             status=row.status,
             ded=row.total_ded_g,
             ded_in_patient=row.total_ded_ip,
@@ -241,7 +256,7 @@ class FilteredPoliciesService(object):
             res = res.filter(*core.filter_validity())
         if req.active_or_last_expired_only:
             # sort on status, so that any active policy (status = 2) pops up...
-            res = res.annotate(not_null_expiry_date=Coalesce('expiry_date', py_datetime.max)) \
+            res = res.annotate(not_null_expiry_date=Coalesce('expiry_date', py_date.max)) \
                 .annotate(not_null_validity_to=Coalesce('validity_to', py_datetime.max)) \
                 .order_by('product__code', 'status', '-not_null_expiry_date', '-not_null_validity_to', '-validity_from')
         return res
