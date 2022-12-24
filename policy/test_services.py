@@ -17,12 +17,13 @@ from .services import *
 
 class EligibilityServiceTestCase(TestCase):
     def setUp(self) -> None:
+        super(EligibilityServiceTestCase, self).setUp()
         self.user = mock.Mock(is_anonymous=False)
         self.user.has_perms = mock.MagicMock(return_value=True)
 
     def test_eligibility_request_permission_denied(self):
         with mock.patch("django.db.backends.utils.CursorWrapper") as mock_cursor:
-            mock_cursor.return_value.__enter__.return_value.description = None
+            mock_cursor.return_value.description = None
             mock_user = mock.Mock(is_anonymous=False)
             mock_user.has_perms = mock.MagicMock(return_value=False)
             req = EligibilityRequest(chf_id="a")
@@ -31,49 +32,51 @@ class EligibilityServiceTestCase(TestCase):
                 service.request(req)
             mock_user.has_perms.assert_called_with(PolicyConfig.gql_query_eligibilities_perms)
 
-    @mock.patch('django.db.connections')
-    def test_eligibility_request_all_good(self, mock_connections):
-        return_values = [
-                            list(range(1, 13)),
-                            [
-                                core.datetime.date(2020, 1, 9),
-                                core.datetime.date(2020, 1, 10),
-                                20,
-                                21,
-                                True,
-                                True,
-                            ],
-                        ][::-1]
-        mock_connections.__getitem__.return_value.cursor.return_value \
-            .__enter__.return_value.fetchone = (lambda: return_values.pop())
-        mock_user = mock.Mock(is_anonymous=False)
-        mock_user.has_perm = mock.MagicMock(return_value=True)
-        req = EligibilityRequest(chf_id="a")
-        service = StoredProcEligibilityService(mock_user)
-        res = service.request(req, EligibilityResponse(req))
+    def test_eligibility_request_all_good(self):
+        with mock.patch("django.db.backends.utils.CursorWrapper") as mock_cursor:
+            return_values = [
+                list(range(1, 13)),
+                [
+                    core.datetime.date(2020, 1, 9),
+                    core.datetime.date(2020, 1, 10),
+                    20,
+                    21,
+                    True,
+                    True,
+                ],
+            ]
+            # required for all modules tests
+            mock_cursor.return_value.fetchone.side_effect = return_values
+            # required for policy module tests
+            mock_cursor.return_value.__enter__.return_value.fetchone.side_effect = return_values
+            mock_user = mock.Mock(is_anonymous=False)
+            mock_user.has_perm = mock.MagicMock(return_value=True)
+            req = EligibilityRequest(chf_id="a")
+            service = StoredProcEligibilityService(mock_user)
+            res = service.request(req, EligibilityResponse(req))
 
-        expected = EligibilityResponse(
-            eligibility_request=req,
-            prod_id=1,
-            total_admissions_left=2,
-            total_visits_left=3,
-            total_consultations_left=4,
-            total_surgeries_left=5,
-            total_deliveries_left=6,
-            total_antenatal_left=7,
-            consultation_amount_left=8,
-            surgery_amount_left=9,
-            delivery_amount_left=10,
-            hospitalization_amount_left=11,
-            antenatal_amount_left=12,
-            min_date_service=core.datetime.date(2020, 1, 9),
-            min_date_item=core.datetime.date(2020, 1, 10),
-            service_left=20,
-            item_left=21,
-            is_item_ok=True,
-            is_service_ok=True,
-        )
-        self.assertEquals(expected, res)
+            expected = EligibilityResponse(
+                eligibility_request=req,
+                prod_id=1,
+                total_admissions_left=2,
+                total_visits_left=3,
+                total_consultations_left=4,
+                total_surgeries_left=5,
+                total_deliveries_left=6,
+                total_antenatal_left=7,
+                consultation_amount_left=8,
+                surgery_amount_left=9,
+                delivery_amount_left=10,
+                hospitalization_amount_left=11,
+                antenatal_amount_left=12,
+                min_date_service=core.datetime.date(2020, 1, 9),
+                min_date_item=core.datetime.date(2020, 1, 10),
+                service_left=20,
+                item_left=21,
+                is_item_ok=True,
+                is_service_ok=True,
+            )
+            self.assertEquals(expected, res)
 
     def test_eligibility_sp_call(self):
         mock_user = mock.Mock(is_anonymous=False)
@@ -301,15 +304,13 @@ class RenewalsTestCase(TestCase):
     item_1 = None
 
     def setUp(self) -> None:
+        super(RenewalsTestCase, self).setUp()
         self.i_user = InteractiveUser(
             login_name="test_batch_run", audit_user_id=978911, id=97891
         )
         self.user = User(i_user=self.i_user)
 
         self.item_1 = create_test_item("D")
-
-    def tearDown(self) -> None:
-        self.item_1.delete()
 
     def test_insert_renewals(self):
         # Given
@@ -464,7 +465,8 @@ class RenewalsTestCase(TestCase):
 
         insuree_newpic = create_test_insuree(
             custom_props={"photo_date": datetime.datetime.now() - datetimedelta(days=30)})
-        insuree_oldpic = create_test_insuree(custom_props={"photo_date": "2010-01-01", "chf_id": "CHFMARK"})  # 5 years by default
+        insuree_oldpic = create_test_insuree(
+            custom_props={"photo_date": "2010-01-01", "chf_id": "CHFMARK"})  # 5 years by default
         product = create_test_product("VISIT")
         officer = create_test_officer(custom_props={"phone": "+32444444444", "phone_communication": True})
         photo_newpic = create_test_photo(insuree_newpic.id, officer.id)
