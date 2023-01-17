@@ -27,6 +27,7 @@ from .gql_mutations import *  # lgtm [py/polluting-import]
 
 from .values import policy_values
 
+
 class Query(graphene.ObjectType):
     policy_values = graphene.Field(
         PolicyAndWarningsGQLType,
@@ -83,7 +84,10 @@ class Query(graphene.ObjectType):
         serviceCode=graphene.String(required=True),
     )
     policy_officers = DjangoFilterConnectionField(
-        OfficerGQLType, search=graphene.String()
+        OfficerGQLType,
+        search=graphene.String(),
+        district=graphene.String(),
+        region=graphene.String(),
     )
 
     def resolve_policy_values(self, info, **kwargs):
@@ -251,21 +255,41 @@ class Query(graphene.ObjectType):
             req=req
         )
 
-    def resolve_policy_officers(self, info, search=None, **kwargs):
+    def resolve_policy_officers(
+            self,
+            info,
+            search=None,
+            district=None,
+            region=None,
+            **kwargs
+            ):
         if not info.context.user.has_perms(
             PolicyConfig.gql_query_policy_officers_perms
         ):
             raise PermissionDenied(_("unauthorized"))
+        queryset = Officer.objects
+        location_id = district if district else region
 
-        qs = Officer.objects
+        if location_id is not None:
+            location = int(location_id)
+            queryset = queryset.filter(
+                Q(officer_villages__location__isnull=False, officer_villages__location__id=location)  # villages
+                | Q(officer_villages__location__parent_id__isnull=False,
+                    officer_villages__location__parent_id=location)  # municipalities
+                | Q(officer_villages__location__parent__parent_id__isnull=False,
+                    officer_villages__location__parent__parent_id=location)  # districts
+                | Q(officer_villages__location__parent__parent__parent_id__isnull=False,
+                    officer_villages__location__parent__parent__parent_id=location)  # regions
+            ).distinct()
+            
         if search is not None:
-            qs = qs.filter(
+            queryset = queryset.filter(
                 Q(code__icontains=search)
                 | Q(last_name__icontains=search)
                 | Q(other_names__icontains=search)
             )
 
-        return qs
+        return queryset
 
 
 class Mutation(graphene.ObjectType):
