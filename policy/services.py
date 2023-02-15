@@ -8,7 +8,7 @@ from django import dispatch
 from django.core.exceptions import PermissionDenied
 from django.db import connection
 from django.db.models import Q, Count, Min, Max, Value
-from django.db.models import Sum, F
+from django.db.models import Sum, F, Case, When
 from django.db.models.functions import Coalesce
 from django.template import Template, Context
 from django.utils.translation import gettext as _
@@ -569,7 +569,15 @@ class NativeEligibilityService(object):
                     waiting_period=F(waiting_period_field),
                     limit_no=F(limit_field)) \
             .annotate(min_date=MonthsAdd(Coalesce(F(waiting_period_field), 0), "effective_date")) \
-            .annotate(count=Sum(f"insuree__claim__{item_or_service}s__qty_provided")) \
+            .annotate(count=Sum(
+                                Case(
+                                    When(
+                                        **{f"insuree__claim__{item_or_service}s__qty_approved__isnull": True},
+                                        then=F(f'insuree__claim__{item_or_service}s__qty_provided')
+                                    ),
+                                    default=F(f'insuree__claim__{item_or_service}s__qty_approved')
+                                )
+                            )) \
             .annotate(left=F("limit_no") - F("count"))
 
         min_date_qs = queryset_item_or_service.aggregate(
