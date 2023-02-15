@@ -570,13 +570,10 @@ class NativeEligibilityService(object):
                     limit_no=F(limit_field)) \
             .annotate(min_date=MonthsAdd(Coalesce(F(waiting_period_field), 0), "effective_date")) \
             .annotate(count=Sum(
-                                Case(
-                                    When(
-                                        **{f"insuree__claim__{item_or_service}s__qty_approved__isnull": True},
-                                        then=F(f'insuree__claim__{item_or_service}s__qty_provided')
-                                    ),
-                                    default=F(f'insuree__claim__{item_or_service}s__qty_approved')
-                                )
+                                Coalesce(
+                                    f"insuree__claim__{item_or_service}s__qty_approved",
+                                    f'insuree__claim__{item_or_service}s__qty_provided'
+                                ),
                             )) \
             .annotate(left=F("limit_no") - F("count"))
 
