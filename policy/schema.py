@@ -92,9 +92,14 @@ class Query(graphene.ObjectType):
 
     def resolve_policy_values(self, info, **kwargs):
 
-        # product = Product.objects.get(id=kwargs.get('product_id'))
         product = Product.objects.filter(
-            (Q(id=kwargs.get('product_id')) | Q(legacy_id=kwargs.get('product_id'))) & Q(validity_from__lte=kwargs.get('enrollDate'))).order_by('-validity_from')[:1][0]
+            Q(validity_to__isnull=True),
+            Q(id=kwargs.get('product_id')) | Q(legacy_id=kwargs.get('product_id')),
+            Q(validity_from__date__lte=kwargs.get('enrollDate')),
+        ).order_by('-validity_from').first()
+
+        if not product:
+            raise ValidationError('Provided product not available')
 
         policy = PolicyGQLType(
             stage=kwargs.get('stage'),
