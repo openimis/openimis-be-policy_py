@@ -1,5 +1,9 @@
+import logging
+
 import graphene
-from policy.services import update_insuree_policies, PolicyService
+from django.db import transaction
+
+from policy.services import PolicyService
 
 from .apps import PolicyConfig
 from core.schema import OpenIMISMutation
@@ -8,6 +12,8 @@ from django.contrib.auth.models import AnonymousUser
 from django.core.exceptions import ValidationError, PermissionDenied
 from django.utils.translation import gettext as _
 from .validations import validate_idle_policy
+
+logger = logging.getLogger(__name__)
 
 
 class PolicyInputType(OpenIMISMutation.Input):
@@ -52,13 +58,15 @@ class CreatePolicyMutation(CreateRenewOrUpdatePolicyMutation):
     @classmethod
     def async_mutate(cls, user, **data):
         try:
-            data["status"] = Policy.STATUS_IDLE
-            data["stage"] = Policy.STAGE_NEW
-            return cls.do_mutate(PolicyConfig.gql_mutation_create_policies_perms, user, **data)
+            with transaction.atomic():
+                data["status"] = Policy.STATUS_IDLE
+                data["stage"] = Policy.STAGE_NEW
+                return cls.do_mutate(PolicyConfig.gql_mutation_create_policies_perms, user, **data)
         except Exception as exc:
             return [{
                 'message': _("policy.mutation.failed_to_create_policy"),
-                'detail': str(exc)}]
+                'detail': str(exc),
+                'exc': exc}]
 
 
 class UpdatePolicyMutation(CreateRenewOrUpdatePolicyMutation):
@@ -71,11 +79,13 @@ class UpdatePolicyMutation(CreateRenewOrUpdatePolicyMutation):
     @classmethod
     def async_mutate(cls, user, **data):
         try:
-            return cls.do_mutate(PolicyConfig.gql_mutation_edit_policies_perms, user, **data)
+            with transaction.atomic():
+                return cls.do_mutate(PolicyConfig.gql_mutation_edit_policies_perms, user, **data)
         except Exception as exc:
             return [{
                 'message': _("policy.mutation.failed_to_update_policy"),
-                'detail': str(exc)}]
+                'detail': str(exc),
+                'exc': exc}]
 
 
 class RenewPolicyMutation(CreateRenewOrUpdatePolicyMutation):
@@ -88,16 +98,18 @@ class RenewPolicyMutation(CreateRenewOrUpdatePolicyMutation):
     @classmethod
     def async_mutate(cls, user, **data):
         try:
-            # ensure we don't update the existing one, but recreate a new one!
-            if 'policy_uuid' in data:
-                data.pop('policy_uuid')
-            data["status"] = Policy.STATUS_IDLE
-            data["stage"] = Policy.STAGE_RENEWED
-            return cls.do_mutate(PolicyConfig.gql_mutation_renew_policies_perms, user, **data)
+            with transaction.atomic():
+                # ensure we don't update the existing one, but recreate a new one!
+                if 'policy_uuid' in data:
+                    data.pop('policy_uuid')
+                data["status"] = Policy.STATUS_IDLE
+                data["stage"] = Policy.STAGE_RENEWED
+                return cls.do_mutate(PolicyConfig.gql_mutation_renew_policies_perms, user, **data)
         except Exception as exc:
             return [{
                 'message': _("policy.mutation.failed_to_renew_policy"),
-                'detail': str(exc)}]
+                'detail': str(exc),
+                'exc': exc}]
 
 
 class SuspendPoliciesMutation(OpenIMISMutation):
@@ -110,29 +122,31 @@ class SuspendPoliciesMutation(OpenIMISMutation):
     @classmethod
     def async_mutate(cls, user, **data):
         try:
-            if type(user) is AnonymousUser or not user.id:
-                raise ValidationError(
-                    _("mutation.authentication_required"))
-            if not user.has_perms(PolicyConfig.gql_mutation_suspend_policies_perms):
-                raise PermissionDenied(_("unauthorized"))
-            errors = []
-            for policy_uuid in data["uuids"]:
-                policy = Policy.objects.filter(uuid=policy_uuid).first()
-                if policy is None:
-                    errors += {
-                        'title': policy_uuid,
-                        'list': [{'message': _(
-                            "policy.mutation.id_does_not_exist") % {'id': policy_uuid}}]
-                    }
-                    continue
-                errors += PolicyService(user).set_suspended(user, policy)
-            if len(errors) == 1:
-                errors = errors[0]['list']
-            return errors
+            with transaction.atomic():
+                if type(user) is AnonymousUser or not user.id:
+                    raise ValidationError(
+                        _("mutation.authentication_required"))
+                if not user.has_perms(PolicyConfig.gql_mutation_suspend_policies_perms):
+                    raise PermissionDenied(_("unauthorized"))
+                errors = []
+                for policy_uuid in data["uuids"]:
+                    policy = Policy.objects.filter(uuid=policy_uuid).first()
+                    if policy is None:
+                        errors += {
+                            'title': policy_uuid,
+                            'list': [{'message': _(
+                                "policy.mutation.id_does_not_exist") % {'id': policy_uuid}}]
+                        }
+                        continue
+                    errors += PolicyService(user).set_suspended(user, policy)
+                if len(errors) == 1:
+                    errors = errors[0]['list']
+                return errors
         except Exception as exc:
             return [{
                 'message': _("policy.mutation.failed_to_suspend_policy"),
-                'detail': str(exc)}]
+                'detail': str(exc),
+                'exc': exc}]
 
 
 class DeletePoliciesMutation(OpenIMISMutation):
@@ -144,21 +158,28 @@ class DeletePoliciesMutation(OpenIMISMutation):
 
     @classmethod
     def async_mutate(cls, user, **data):
-        if not user.has_perms(PolicyConfig.gql_mutation_delete_policies_perms):
-            raise PermissionDenied(_("unauthorized"))
-        errors = []
-        for policy_uuid in data["uuids"]:
-            policy = Policy.objects \
-                .filter(uuid=policy_uuid) \
-                .first()
-            if policy is None:
-                errors += {
-                    'title': policy_uuid,
-                    'list': [{'message': _(
-                        "policy.validation.id_does_not_exist") % {'id': policy_uuid}}]
-                }
-                continue
-            errors += PolicyService(user).set_deleted(policy)
-        if len(errors) == 1:
-            errors = errors[0]['list']
-        return errors
+        try:
+            with transaction.atomic():
+                if not user.has_perms(PolicyConfig.gql_mutation_delete_policies_perms):
+                    raise PermissionDenied(_("unauthorized"))
+                errors = []
+                for policy_uuid in data["uuids"]:
+                    policy = Policy.objects \
+                        .filter(uuid=policy_uuid) \
+                        .first()
+                    if policy is None:
+                        errors += {
+                            'title': policy_uuid,
+                            'list': [{'message': _(
+                                "policy.validation.id_does_not_exist") % {'id': policy_uuid}}]
+                        }
+                        continue
+                    errors += PolicyService(user).set_deleted(policy)
+                if len(errors) == 1:
+                    errors = errors[0]['list']
+                return errors
+        except Exception as exc:
+            return [{
+                'message': _("policy.mutation.failed_to_delete_policies"),
+                'detail': str(exc),
+                'exc': exc}]
