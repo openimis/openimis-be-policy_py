@@ -91,6 +91,8 @@ class Query(graphene.ObjectType):
     )
 
     def resolve_policy_values(self, info, **kwargs):
+        if not info.context.user.has_perms(PolicyConfig.gql_query_policies_perms):
+            raise PermissionDenied(_("unauthorized"))
 
         product = Product.objects.filter(
             Q(validity_to__isnull=True),
