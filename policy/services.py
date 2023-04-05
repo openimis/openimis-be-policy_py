@@ -91,6 +91,9 @@ class PolicyService:
 
     def set_deleted(self, policy):
         try:
+            insuree_policies = InsureePolicy.objects.filter(policy=policy)
+            for insuree_policy in insuree_policies:
+                insuree_policy.delete_history()
             policy.delete_history()
             return []
         except Exception as exc:
@@ -569,11 +572,9 @@ class NativeEligibilityService(object):
                     waiting_period=F(waiting_period_field),
                     limit_no=F(limit_field)) \
             .annotate(min_date=MonthsAdd(Coalesce(F(waiting_period_field), 0), "effective_date")) \
-            .annotate(count=Sum(
-                                Coalesce(
-                                    f"insuree__claim__{item_or_service}s__qty_approved",
-                                    f'insuree__claim__{item_or_service}s__qty_provided'
-                                ),
+            .annotate(count=Coalesce(
+                                f"insuree__claim__{item_or_service}s__qty_approved",
+                                f'insuree__claim__{item_or_service}s__qty_provided'
                             )) \
             .annotate(left=F("limit_no") - F("count"))
 
