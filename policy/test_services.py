@@ -78,6 +78,7 @@ class EligibilityServiceTestCase(TestCase):
             )
             self.assertEquals(expected, res)
 
+    @skip("skip test that uses sp")
     def test_eligibility_sp_call(self):
         mock_user = mock.Mock(is_anonymous=False)
         mock_user.has_perm = mock.MagicMock(return_value=True)
@@ -116,9 +117,9 @@ class EligibilityServiceTestCase(TestCase):
             Service.CATEGORY_ANTENATAL,
         ]:
             with self.subTest(category=category):
-                self.eligibility_stored_proc_serv(category)
+                self.eligibility_serv(category)
 
-    def eligibility_stored_proc_serv(self, category):
+    def eligibility_serv(self, category):
         insuree = create_test_insuree(custom_props={"chf_id": "elgsp" + category})
         product = create_test_product("ELI1")
         (policy, insuree_policy) = create_test_policy2(product, insuree)
@@ -132,15 +133,34 @@ class EligibilityServiceTestCase(TestCase):
         errors += process_dedrem(claim, -1, True)
         self.assertEqual(len(errors), 0)
 
-        sp_el_svc = StoredProcEligibilityService(self.user)
         native_el_svc = NativeEligibilityService(self.user)
         req = EligibilityRequest(chf_id=insuree.chf_id, service_code=service.code)
+        expected_resposnse = EligibilityResponse(
+            antenatal_amount_left=None,
+            consultation_amount_left=None,
+            delivery_amount_left=None,
+            eligibility_request=req,
+            final=False,
+            hospitalization_amount_left=None,
+            is_item_ok=True,
+            is_service_ok=True,
+            item_left=None,
+            min_date_item=core.datetime.date(2019, 3, 1),
+            min_date_service=None,
+            prod_id=product.id,
+            service_left=13.00,
+            surgery_amount_left=None,
+            total_visits_left=None,
+            total_antenatal_left=None,
+            total_surgeries_left=None,
+            total_admissions_left=None,
+            total_deliveries_left=None,
+            total_consultations_left=None,
+        )
         settings.ROW_SECURITY = False
         native_response = native_el_svc.request(req, EligibilityResponse(req))
-        sp_response = sp_el_svc.request(req, EligibilityResponse(req))
         self.assertIsNotNone(native_response)
-        self.assertIsNotNone(sp_response)
-        self.assertEquals(native_response, sp_response)
+        self.assertEquals(native_response, expected_resposnse)
 
         claim.dedrems.all().delete()
         claim_service.delete()
@@ -153,7 +173,7 @@ class EligibilityServiceTestCase(TestCase):
         product.delete()
         insuree.delete()
 
-    def test_eligibility_stored_proc_item(self):
+    def test_eligibility_item(self):
         insuree = create_test_insuree()
         product = create_test_product("ELI1")
         (policy, insuree_policy) = create_test_policy2(product, insuree)
@@ -167,17 +187,35 @@ class EligibilityServiceTestCase(TestCase):
         errors += process_dedrem(claim, -1, True)
         self.assertEqual(len(errors), 0)
 
-        sp_el_svc = StoredProcEligibilityService(self.user)
         native_el_svc = NativeEligibilityService(self.user)
         req = EligibilityRequest(chf_id=insuree.chf_id, item_code=item.code)
+        expected_resposnse = EligibilityResponse(
+            antenatal_amount_left=None,
+            consultation_amount_left=None,
+            delivery_amount_left=None,
+            eligibility_request=req,
+            final=False,
+            hospitalization_amount_left=None,
+            is_item_ok=True,
+            is_service_ok=True,
+            item_left=5.00,
+            min_date_item=core.datetime.date(2019, 3, 1),
+            min_date_service=None,
+            prod_id=product.id,
+            service_left=None,
+            surgery_amount_left=None,
+            total_visits_left=None,
+            total_antenatal_left=None,
+            total_surgeries_left=None,
+            total_admissions_left=None,
+            total_deliveries_left=None,
+            total_consultations_left=None,
+        )
         settings.ROW_SECURITY = False
         native_response = EligibilityResponse(req)
         native_response = native_el_svc.request(req, native_response)
-        sp_response = EligibilityResponse(req)
-        sp_response = sp_el_svc.request(req, sp_response)
         self.assertIsNotNone(native_response)
-        self.assertIsNotNone(sp_response)
-        self.assertEquals(native_response, sp_response)
+        self.assertEquals(native_response, expected_resposnse)
 
         claim.dedrems.all().delete()
         claim_item.delete()
@@ -204,17 +242,35 @@ class EligibilityServiceTestCase(TestCase):
         errors += process_dedrem(claim, -1, True)
         self.assertEqual(len(errors), 0)
 
-        sp_el_svc = StoredProcEligibilityService(self.user)
         native_el_svc = NativeEligibilityService(self.user)
         req = EligibilityRequest(chf_id=insuree.chf_id, item_code=item.code)
+        expected_resposnse = EligibilityResponse(
+            antenatal_amount_left=None,
+            consultation_amount_left=None,
+            delivery_amount_left=None,
+            eligibility_request=req,
+            final=False,
+            hospitalization_amount_left=None,
+            is_item_ok=True,
+            is_service_ok=True,
+            item_left=5.00,
+            min_date_item=core.datetime.date(2019, 3, 1),
+            min_date_service=None,
+            prod_id=product.id,
+            service_left=None,
+            surgery_amount_left=None,
+            total_visits_left=None,
+            total_antenatal_left=None,
+            total_surgeries_left=None,
+            total_admissions_left=None,
+            total_deliveries_left=None,
+            total_consultations_left=None,
+        )
         settings.ROW_SECURITY = False
         native_response = EligibilityResponse(req)
         native_response = native_el_svc.request(req, native_response)
-        sp_response = EligibilityResponse(req)
-        sp_response = sp_el_svc.request(req, sp_response)
         self.assertIsNotNone(native_response)
-        self.assertIsNotNone(sp_response)
-        self.assertEquals(native_response, sp_response)
+        self.assertEquals(native_response, expected_resposnse)
 
         claim.dedrems.all().delete()
         claim_item.delete()
