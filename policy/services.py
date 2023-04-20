@@ -203,13 +203,33 @@ class FilteredPoliciesService(object):
                 ceiling_ip = row.product.max_ip_insuree - (row.total_rem_ip if row.total_rem_ip else 0)
             if row.product.max_op_insuree:
                 ceiling_op = row.product.max_op_insuree - (row.total_rem_op if row.total_rem_op else 0)
+
+        members_count = row.family.members.count()
+        threshold = row.product.threshold
+        total_rem_g = row.total_rem_g if row.total_rem_g else 0
+        total_rem_ip = row.total_rem_ip if row.total_rem_ip else 0
+        total_rem_op = row.total_rem_op if row.total_rem_op else 0
+
         if row.product.max_policy:
-            ceiling = row.product.max_policy - (row.total_rem_g if row.total_rem_g else 0)
+            max_policy = row.product.max_policy
+            if members_count > threshold:
+                max_policy += (members_count - threshold) * row.product.max_policy_extra_member
+            ceiling = max_policy - total_rem_g
         else:
+            ceiling_ip = 0
             if row.product.max_ip_policy:
-                ceiling_ip = row.product.max_ip_policy - (row.total_rem_ip if row.total_rem_ip else 0)
+                max_ip_policy = row.product.max_ip_policy
+                if members_count > threshold:
+                    max_ip_policy += (members_count - threshold) * row.product.max_policy_extra_member_ip
+                ceiling_ip = max_ip_policy - total_rem_ip
+
+            ceiling_op = 0
             if row.product.max_op_policy:
-                ceiling_op = row.product.max_op_policy - (row.total_rem_op if row.total_rem_op else 0)
+                max_op_policy = row.product.max_op_policy
+                if members_count > threshold:
+                    max_op_policy += (members_count - threshold) * row.product.max_policy_extra_member_op
+                ceiling_op = max_op_policy - total_rem_op
+
         balance = row.value
         if row.total_ded_g:
             balance -= row.total_ded_g

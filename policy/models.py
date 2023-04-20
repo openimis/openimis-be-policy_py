@@ -33,7 +33,14 @@ class Policy(core_models.VersionedModel):
     # row_id = models.BinaryField(db_column='RowID', blank=True, null=True)
 
     def sum_premiums(self, photo=False):
-        return sum([p.amount for p in self.premiums.filter(is_photo_fee=photo).all()])
+        return sum(
+            [
+                p.amount
+                for p in self.premiums.filter(
+                    is_photo_fee=photo, validity_to__isnull=True
+                ).all()
+            ]
+        )
 
     def claim_ded_rems(self):
         return self.claim_ded_rems
