@@ -30,10 +30,11 @@ class Policy(core_models.VersionedModel):
 
     offline = models.BooleanField(db_column='isOffline', blank=True, null=True)
     audit_user_id = models.IntegerField(db_column='AuditUserID')
+    # validity_to = models.BooleanField(db_column='ValidityTo', null=True)
     # row_id = models.BinaryField(db_column='RowID', blank=True, null=True)
 
     def sum_premiums(self, photo=False):
-        return sum([p.amount for p in self.premiums.filter(is_photo_fee=photo).all()])
+        return sum([p.amount for p in self.premiums.filter(is_photo_fee=photo, validity_to__isnull=True).all()])
 
     def claim_ded_rems(self):
         return self.claim_ded_rems
