@@ -30,7 +30,6 @@ class Policy(core_models.VersionedModel):
 
     offline = models.BooleanField(db_column='isOffline', blank=True, null=True)
     audit_user_id = models.IntegerField(db_column='AuditUserID')
-    # validity_to = models.BooleanField(db_column='ValidityTo', null=True)
     # row_id = models.BinaryField(db_column='RowID', blank=True, null=True)
 
     def sum_premiums(self, photo=False):
