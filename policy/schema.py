@@ -186,7 +186,8 @@ class Query(graphene.ObjectType):
             ceiling_out_patient=item.ceiling_out_patient,
             balance=item.balance,
             validity_from=item.validity_from,
-            validity_to=item.validity_to
+            validity_to=item.validity_to,
+            max_installments=item.max_installments,
         )
 
     def resolve_policies_by_insuree(self, info, **kwargs):
