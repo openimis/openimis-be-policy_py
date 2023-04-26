@@ -75,6 +75,7 @@ class PolicyByFamilyOrInsureeGQLType(graphene.ObjectType):
     balance = graphene.Float()
     validity_from = graphene.Date()
     validity_to = graphene.Date()
+    max_installments = graphene.Int()
 
 
 class PolicyByFamilyOrInsureeConnection(ExtendedRelayConnection):
