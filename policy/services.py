@@ -584,7 +584,8 @@ class NativeEligibilityService(object):
                     **{f"policy__product__{item_or_service}s__{item_or_service}_id": item_or_service_obj.id}) \
             .filter(policy__status=Policy.STATUS_ACTIVE) \
             .filter(insuree=insuree) \
-            .filter(Q(insuree__claim__validity_to__isnull=True)
+            .filter(Q(insuree__claim__validity_to__isnull=True,
+                      **{f"insuree__claim__{item_or_service}s__{item_or_service}_id": item_or_service_obj.id})
                     & Q(**{f"insuree__claim__{item_or_service}s__validity_to__isnull": True})
                     & (Q(**{f"insuree__claim__{item_or_service}s__status": ClaimItem.STATUS_PASSED})
                        | Q(**{f"insuree__claim__{item_or_service}s__status__isnull": True}))
