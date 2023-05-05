@@ -580,7 +580,7 @@ class NativeEligibilityService(object):
         queryset_item_or_service = InsureePolicy.objects\
             .filter(validity_to__isnull=True)\
             .filter(policy__validity_to__isnull=True)\
-            .filter(policy__product__items__validity_to__isnull=True,
+            .filter(**{f"policy__product__{item_or_service}s__validity_to__isnull": True},
                     **{f"policy__product__{item_or_service}s__{item_or_service}_id": item_or_service_obj.id}) \
             .filter(policy__status=Policy.STATUS_ACTIVE) \
             .filter(insuree=insuree) \
@@ -596,10 +596,10 @@ class NativeEligibilityService(object):
                     waiting_period=F(waiting_period_field),
                     limit_no=F(limit_field)) \
             .annotate(min_date=MonthsAdd(Coalesce(F(waiting_period_field), 0), "effective_date")) \
-            .annotate(count=Coalesce(
+            .annotate(count=Sum(Coalesce(
                                 f"insuree__claim__{item_or_service}s__qty_approved",
                                 f'insuree__claim__{item_or_service}s__qty_provided'
-                            )) \
+                            ))) \
             .annotate(left=F("limit_no") - F("count"))
 
         min_date_qs = queryset_item_or_service.aggregate(
