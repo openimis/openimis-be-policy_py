@@ -10,7 +10,7 @@ import uuid
 class Migration(migrations.Migration):
 
     dependencies = [
-        ('insuree', '0015_set_managed_to_true_in_all_models'),
+        ('insuree', '0013_auto_20211103_1023'),
         ('core', '0019_extended_field'),
         ('product', '0006_insert_ceiling_type'),
         ('policy', '0004_add_medical_oficer_reading_rights'),
