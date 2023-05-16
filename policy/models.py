@@ -52,7 +52,7 @@ class Policy(core_models.VersionedModel):
         return self.family.members.filter(validity_to__isnull=True).count() < self.product.max_members
 
     class Meta:
-        managed = False
+        managed = True
         db_table = 'tblPolicy'
 
     STATUS_IDLE = 1
@@ -106,7 +106,7 @@ class PolicyRenewal(core_models.VersionedModel):
     audit_user_id = models.IntegerField(db_column='AuditCreateUser', null=True, blank=True)
 
     class Meta:
-        managed = False
+        managed = True
         db_table = 'tblPolicyRenewals'
 
 
