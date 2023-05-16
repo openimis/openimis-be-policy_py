@@ -33,7 +33,14 @@ class Policy(core_models.VersionedModel):
     # row_id = models.BinaryField(db_column='RowID', blank=True, null=True)
 
     def sum_premiums(self, photo=False):
-        return sum([p.amount for p in self.premiums.filter(is_photo_fee=photo).all()])
+        return sum(
+            [
+                p.amount
+                for p in self.premiums.filter(
+                    is_photo_fee=photo, validity_to__isnull=True
+                ).all()
+            ]
+        )
 
     def claim_ded_rems(self):
         return self.claim_ded_rems
@@ -45,7 +52,7 @@ class Policy(core_models.VersionedModel):
         return self.family.members.filter(validity_to__isnull=True).count() < self.product.max_members
 
     class Meta:
-        managed = False
+        managed = True
         db_table = 'tblPolicy'
 
     STATUS_IDLE = 1
@@ -99,7 +106,7 @@ class PolicyRenewal(core_models.VersionedModel):
     audit_user_id = models.IntegerField(db_column='AuditCreateUser', null=True, blank=True)
 
     class Meta:
-        managed = False
+        managed = True
         db_table = 'tblPolicyRenewals'
 
 
