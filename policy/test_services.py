@@ -412,9 +412,6 @@ class RenewalsTestCase(TestCase):
         self.assertIsNone(should_not_renew)
 
         # tearDown
-        # family_sample = Family.objects.all()
-        # print(family_sample)
-        # family_sample.delete()
         family.delete()
         renewals.delete()
         inspolicy_expiring.delete()
