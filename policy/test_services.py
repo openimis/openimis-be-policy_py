@@ -6,10 +6,10 @@ from core.models import InteractiveUser, User
 from core.test_helpers import create_test_officer
 from django.conf import settings
 from django.test import TestCase
-from insuree.test_helpers import create_test_insuree, create_test_photo
+from insuree.test_helpers import create_test_photo
 from medical.test_helpers import create_test_item, create_test_service
 from medical_pricelist.test_helpers import add_service_to_hf_pricelist, add_item_to_hf_pricelist
-from policy.test_helpers import create_test_policy2
+from policy.test_helpers import create_test_policy2, create_test_insuree_for_policy
 from product.test_helpers import create_test_product, create_test_product_service, create_test_product_item
 
 from .services import *
@@ -109,6 +109,8 @@ class EligibilityServiceTestCase(TestCase):
         self.assertEquals(expected, res)
 
     def test_eligibility_stored_proc_serv(self):
+        if not connection.vendor == "mssql":
+            self.skipTest("This test can only be executed for MSSQL database")
         for category in [
             Service.CATEGORY_SURGERY,
             Service.CATEGORY_CONSULTATION,
@@ -120,7 +122,7 @@ class EligibilityServiceTestCase(TestCase):
                 self.eligibility_serv(category)
 
     def eligibility_serv(self, category):
-        insuree = create_test_insuree(custom_props={"chf_id": "elgsp" + category})
+        insuree, family = create_test_insuree_for_policy(custom_props={"chf_id": "elgsp" + category})
         product = create_test_product("ELI1")
         (policy, insuree_policy) = create_test_policy2(product, insuree)
         service = create_test_service(category)
@@ -162,6 +164,7 @@ class EligibilityServiceTestCase(TestCase):
         self.assertIsNotNone(native_response)
         self.assertEquals(native_response, expected_resposnse)
 
+        family.delete()
         claim.dedrems.all().delete()
         claim_service.delete()
         claim.delete()
@@ -174,7 +177,9 @@ class EligibilityServiceTestCase(TestCase):
         insuree.delete()
 
     def test_eligibility_item(self):
-        insuree = create_test_insuree()
+        if not connection.vendor == "mssql":
+            self.skipTest("This test can only be executed for MSSQL database")
+        insuree, family = create_test_insuree_for_policy()
         product = create_test_product("ELI1")
         (policy, insuree_policy) = create_test_policy2(product, insuree)
         item = create_test_item("A")
@@ -217,6 +222,7 @@ class EligibilityServiceTestCase(TestCase):
         self.assertIsNotNone(native_response)
         self.assertEquals(native_response, expected_resposnse)
 
+        family.delete()
         claim.dedrems.all().delete()
         claim_item.delete()
         claim.delete()
@@ -229,7 +235,9 @@ class EligibilityServiceTestCase(TestCase):
         insuree.delete()
 
     def test_eligibility_by_insuree(self):
-        insuree = create_test_insuree()
+        if not connection.vendor == "mssql":
+            self.skipTest("This test can only be executed for MSSQL database")
+        insuree, family = create_test_insuree_for_policy()
         product = create_test_product("ELI1")
         (policy, insuree_policy) = create_test_policy2(product, insuree)
         item = create_test_item("A")
@@ -272,6 +280,7 @@ class EligibilityServiceTestCase(TestCase):
         self.assertIsNotNone(native_response)
         self.assertEquals(native_response, expected_resposnse)
 
+        family.delete()
         claim.dedrems.all().delete()
         claim_item.delete()
         claim.delete()
@@ -286,7 +295,7 @@ class EligibilityServiceTestCase(TestCase):
     @skip("Not sure what is the proper behaviour when an IP is not present, skipping for now so that the main case"
           "can be fixed.")
     def test_eligibility_stored_proc_item_no_insuree_policy(self):
-        insuree = create_test_insuree()
+        insuree = create_test_insuree_for_policy()
         product = create_test_product("ELI1")
         (policy, _) = create_test_policy2(
             product, insuree, link=False, custom_props={"status": Policy.STATUS_IDLE})
@@ -315,7 +324,7 @@ class EligibilityServiceTestCase(TestCase):
         insuree.delete()
 
     def test_eligibility_signal(self):
-        insuree = create_test_insuree()
+        insuree, family = create_test_insuree_for_policy()
         product = create_test_product("ELI1")
         (policy, insuree_policy) = create_test_policy2(product, insuree)
         item = create_test_item("A")
@@ -343,6 +352,7 @@ class EligibilityServiceTestCase(TestCase):
         self.assertIsNotNone(response)
         self.assertEquals(response.total_admissions_left, 444719)
 
+        family.delete()
         signal_eligibility_service_before.disconnect(signal_before)
         claim.dedrems.all().delete()
         claim_item.delete()
@@ -372,7 +382,7 @@ class RenewalsTestCase(TestCase):
         # Given
         from core import datetime, datetimedelta
 
-        insuree = create_test_insuree()
+        insuree, family = create_test_insuree_for_policy()
         product = create_test_product("VISIT")
         officer = create_test_officer()
 
@@ -402,6 +412,10 @@ class RenewalsTestCase(TestCase):
         self.assertIsNone(should_not_renew)
 
         # tearDown
+        # family_sample = Family.objects.all()
+        # print(family_sample)
+        # family_sample.delete()
+        family.delete()
         renewals.delete()
         inspolicy_expiring.delete()
         policy_expiring.delete()
@@ -415,7 +429,7 @@ class RenewalsTestCase(TestCase):
         # Given
         from core import datetime, datetimedelta
 
-        insuree = create_test_insuree()
+        insuree, family = create_test_insuree_for_policy()
         product = create_test_product("VISIT")
         officer = create_test_officer()
 
@@ -444,6 +458,7 @@ class RenewalsTestCase(TestCase):
         self.assertEquals(policy_not_expired_yet.status, Policy.STATUS_ACTIVE)
 
         # tearDown
+        family.delete()
         inspolicy_expiring.delete()
         policy_expiring.delete()
         inspolicy_not_expired_yet.delete()
@@ -456,7 +471,7 @@ class RenewalsTestCase(TestCase):
         # Given
         from core import datetime, datetimedelta
 
-        insuree = create_test_insuree(
+        insuree, family = create_test_insuree_for_policy(
             custom_props={"chf_id": "TESTCHFSMS", "phone": "+33644444719"},
             family_custom_props={"location_id": 62},
         )
@@ -506,6 +521,7 @@ class RenewalsTestCase(TestCase):
         self.assertIn("Test product VISIT", officer_sms[0].sms_message)
 
         # tearDown
+        family.delete()
         officer.policy_renewals.all().delete()
         policy_expiring.insuree_policies.all().delete()
         policy_expiring.delete()
@@ -519,9 +535,9 @@ class RenewalsTestCase(TestCase):
         # Given
         from core import datetime, datetimedelta
 
-        insuree_newpic = create_test_insuree(
+        insuree_newpic, family_newpic = create_test_insuree_for_policy(
             custom_props={"photo_date": datetime.datetime.now() - datetimedelta(days=30)})
-        insuree_oldpic = create_test_insuree(
+        insuree_oldpic, family_oldpic = create_test_insuree_for_policy(
             custom_props={"photo_date": "2010-01-01", "chf_id": "CHFMARK"})  # 5 years by default
         product = create_test_product("VISIT")
         officer = create_test_officer(custom_props={"phone": "+32444444444", "phone_communication": True})
@@ -568,6 +584,8 @@ class RenewalsTestCase(TestCase):
         self.assertTrue("HOF\nCHFMARK\nTest Last First Second\n\n" in old_sms[0])
 
         # tearDown
+        family_newpic.delete()
+        family_oldpic.delete()
         renewals_old.first().details.all().delete()
         renewals_old.delete()
         renewals_new.first().details.all().delete()
