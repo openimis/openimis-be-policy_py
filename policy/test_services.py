@@ -518,7 +518,6 @@ class RenewalsTestCase(TestCase):
         self.assertIn("Test product VISIT", officer_sms[0].sms_message)
 
         # tearDown
-        family.delete()
         officer.policy_renewals.all().delete()
         policy_expiring.insuree_policies.all().delete()
         policy_expiring.delete()
@@ -527,6 +526,7 @@ class RenewalsTestCase(TestCase):
         officer.delete()
         product.delete()
         insuree.delete()
+        family.delete()
 
     def test_insert_renewal_details(self):
         # Given
