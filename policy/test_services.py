@@ -455,7 +455,6 @@ class RenewalsTestCase(TestCase):
         self.assertEquals(policy_not_expired_yet.status, Policy.STATUS_ACTIVE)
 
         # tearDown
-        family.delete()
         inspolicy_expiring.delete()
         policy_expiring.delete()
         inspolicy_not_expired_yet.delete()
@@ -463,6 +462,7 @@ class RenewalsTestCase(TestCase):
         officer.delete()
         product.delete()
         insuree.delete()
+        family.delete()
 
     def test_renewals_sms(self):
         # Given
