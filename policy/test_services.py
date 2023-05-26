@@ -352,7 +352,6 @@ class EligibilityServiceTestCase(TestCase):
         self.assertIsNotNone(response)
         self.assertEquals(response.total_admissions_left, 444719)
 
-        family.delete()
         signal_eligibility_service_before.disconnect(signal_before)
         claim.dedrems.all().delete()
         claim_item.delete()
@@ -364,6 +363,7 @@ class EligibilityServiceTestCase(TestCase):
         policy.delete()
         product.delete()
         insuree.delete()
+        family.delete()
 
 
 class RenewalsTestCase(TestCase):
@@ -412,7 +412,6 @@ class RenewalsTestCase(TestCase):
         self.assertIsNone(should_not_renew)
 
         # tearDown
-        family.delete()
         renewals.delete()
         inspolicy_expiring.delete()
         policy_expiring.delete()
@@ -421,6 +420,7 @@ class RenewalsTestCase(TestCase):
         officer.delete()
         product.delete()
         insuree.delete()
+        family.delete()
 
     def test_update_renewals(self):
         # Given
@@ -581,8 +581,6 @@ class RenewalsTestCase(TestCase):
         self.assertTrue("HOF\nCHFMARK\nTest Last First Second\n\n" in old_sms[0])
 
         # tearDown
-        family_newpic.delete()
-        family_oldpic.delete()
         renewals_old.first().details.all().delete()
         renewals_old.delete()
         renewals_new.first().details.all().delete()
@@ -596,4 +594,6 @@ class RenewalsTestCase(TestCase):
         photo_newpic.delete()
         photo_oldpic.delete()
         insuree_oldpic.delete()
+        family_oldpic.delete()
         insuree_newpic.delete()
+        family_newpic.delete()
