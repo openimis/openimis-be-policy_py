@@ -1,5 +1,6 @@
 from django.utils.translation import gettext as _
 import datetime as py_datetime
+from decimal import *
 from core.apps import CoreConfig
 from .models import Policy
 
@@ -168,7 +169,7 @@ def set_value(policy, family, prev_policy):
     contributions = sum_contributions(product, f_counts)
     general_assembly = sum_general_assemblies(product, f_counts)
     registration = sum_registrations(policy, product, f_counts)
-    policy.value = contributions + general_assembly + registration
+    policy.value = Decimal(contributions + general_assembly + registration)
     discount(policy, prev_policy)
 
 
