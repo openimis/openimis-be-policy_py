@@ -7,7 +7,7 @@ from policy.services import PolicyService
 
 from .apps import PolicyConfig
 from core.schema import OpenIMISMutation
-from .models import Policy
+from .models import Policy, PolicyMutation
 from django.contrib.auth.models import AnonymousUser
 from django.core.exceptions import ValidationError, PermissionDenied
 from django.utils.translation import gettext as _
@@ -38,13 +38,15 @@ class CreateRenewOrUpdatePolicyMutation(OpenIMISMutation):
                 _("mutation.authentication_required"))
         if not user.has_perms(perms):
             raise PermissionDenied(_("unauthorized"))
+        client_mutation_id = data.get("client_mutation_id")
         errors = validate_idle_policy(data)
         if len(errors):
             return errors
         data['audit_user_id'] = user.id_for_audit
         from core.utils import TimeUtils
         data['validity_from'] = TimeUtils.now()
-        PolicyService(user).update_or_create(data, user)
+        policy = PolicyService(user).update_or_create(data, user)
+        PolicyMutation.object_mutated(user, client_mutation_id=client_mutation_id, policy=policy)
         return None
 
 
