@@ -110,7 +110,7 @@ class PolicyRenewal(core_models.VersionedModel):
         db_table = 'tblPolicyRenewals'
 
 
-class PolicyMutation(core_models.UUIDModel):
+class PolicyMutation(core_models.UUIDModel, core_models.ObjectMutation):
     policy = models.ForeignKey(Policy, models.DO_NOTHING,
                                  related_name='mutations')
     mutation = models.ForeignKey(
@@ -118,4 +118,4 @@ class PolicyMutation(core_models.UUIDModel):
 
     class Meta:
         managed = True
-        db_table = "location_PolicyMutation"
+        db_table = "policy_PolicyMutation"
