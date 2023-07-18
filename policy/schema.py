@@ -1,3 +1,4 @@
+from claim.apps import ClaimConfig
 from core.schema import (
     OrderedDjangoFilterConnectionField,
     signal_mutation_module_validate,
@@ -26,6 +27,7 @@ from .gql_queries import *  # lgtm [py/polluting-import]
 from .gql_mutations import *  # lgtm [py/polluting-import]
 
 from .values import policy_values
+
 
 class Query(graphene.ObjectType):
     policy_values = graphene.Field(
@@ -83,11 +85,25 @@ class Query(graphene.ObjectType):
         serviceCode=graphene.String(required=True),
     )
     policy_officers = DjangoFilterConnectionField(
-        OfficerGQLType, search=graphene.String()
+        OfficerGQLType,
+        search=graphene.String(),
+        district=graphene.String(),
+        region=graphene.String(),
     )
 
     def resolve_policy_values(self, info, **kwargs):
-        product = Product.objects.get(id=kwargs.get('product_id'))
+        if not info.context.user.has_perms(PolicyConfig.gql_query_policies_perms):
+            raise PermissionDenied(_("unauthorized"))
+
+        product = Product.objects.filter(
+            Q(validity_to__isnull=True),
+            Q(id=kwargs.get('product_id')) | Q(legacy_id=kwargs.get('product_id')),
+            Q(validity_from__date__lte=kwargs.get('enrollDate')),
+        ).order_by('-validity_from').first()
+
+        if not product:
+            raise ValidationError('Provided product not available')
+
         policy = PolicyGQLType(
             stage=kwargs.get('stage'),
             enroll_date=kwargs.get('enrollDate'),
@@ -96,7 +112,8 @@ class Query(graphene.ObjectType):
         )
         prefetch = Prefetch(
             'members',
-            queryset=Insuree.objects.filter(validity_to__isnull=True).order_by('validity_from')
+            queryset=Insuree.objects.filter(
+                validity_to__isnull=True).order_by('validity_from')
         )
         family = Family.objects \
             .prefetch_related(prefetch) \
@@ -121,18 +138,23 @@ class Query(graphene.ObjectType):
                 .filter(validity_to__isnull=True).annotate(i_count=Count('id'))
             covered_sq = covered_count.filter(policy_id=OuterRef('id'))
             query = query.annotate(
-                inactive_count=Subquery(family_sq.values('m_count')) - Subquery(covered_sq.values('i_count'))
+                inactive_count=Subquery(family_sq.values(
+                    'm_count')) - Subquery(covered_sq.values('i_count'))
             )
             query = query.filter(inactive_count__gt=0)
         if kwargs.get('balance_lte') or kwargs.get('balance_gte'):
-            sum_premiums = Premium.objects.filter(is_photo_fee=False).values('policy_id').annotate(sum=Sum('amount'))
-            sum_premiums_subquery = sum_premiums.filter(policy_id=OuterRef('id'))
-            query = query.annotate(balance=F('value') - Subquery(sum_premiums_subquery.values('sum')))
+            sum_premiums = Premium.objects.filter(is_photo_fee=False).values(
+                'policy_id').annotate(sum=Sum('amount'))
+            sum_premiums_subquery = sum_premiums.filter(
+                policy_id=OuterRef('id'))
+            query = query.annotate(
+                balance=F('value') - Subquery(sum_premiums_subquery.values('sum')))
         if kwargs.get('balance_lte'):
             query = query.filter(balance__lte=kwargs.get('balance_lte'))
         if kwargs.get('balance_gte'):
             query = query.filter(balance__gte=kwargs.get('balance_gte'))
-        location_id = kwargs.get('district_id') if kwargs.get('district_id') else kwargs.get('region_id')
+        location_id = kwargs.get('district_id') if kwargs.get(
+            'district_id') else kwargs.get('region_id')
         if location_id:
             location_level = 2 if kwargs.get('district_id') else 1
             f = '_id'
@@ -165,15 +187,18 @@ class Query(graphene.ObjectType):
             ceiling_out_patient=item.ceiling_out_patient,
             balance=item.balance,
             validity_from=item.validity_from,
-            validity_to=item.validity_to
+            validity_to=item.validity_to,
+            max_installments=item.max_installments,
         )
 
     def resolve_policies_by_insuree(self, info, **kwargs):
-        if not info.context.user.has_perms(PolicyConfig.gql_query_policies_by_insuree_perms):
+        if not info.context.user.has_perms(PolicyConfig.gql_query_policies_by_insuree_perms) \
+                and not info.context.user.has_perms(ClaimConfig.gql_query_claims_perms):
             raise PermissionDenied(_("unauthorized"))
         req = ByInsureeRequest(
             chf_id=kwargs.get('chf_id'),
-            active_or_last_expired_only=kwargs.get('active_or_last_expired_only', False),
+            active_or_last_expired_only=kwargs.get(
+                'active_or_last_expired_only', False),
             show_history=kwargs.get('show_history', False),
             order_by=kwargs.get('order_by', None)
         )
@@ -185,7 +210,8 @@ class Query(graphene.ObjectType):
             raise PermissionDenied(_("unauthorized"))
         req = ByFamilyRequest(
             family_uuid=kwargs.get('family_uuid'),
-            active_or_last_expired_only=kwargs.get('active_or_last_expired_only', False),
+            active_or_last_expired_only=kwargs.get(
+                'active_or_last_expired_only', False),
             show_history=kwargs.get('show_history', False),
             order_by=kwargs.get('order_by', None)
         )
@@ -251,21 +277,42 @@ class Query(graphene.ObjectType):
             req=req
         )
 
-    def resolve_policy_officers(self, info, search=None, **kwargs):
+    def resolve_policy_officers(
+            self,
+            info,
+            search=None,
+            district=None,
+            region=None,
+            **kwargs
+    ):
         if not info.context.user.has_perms(
             PolicyConfig.gql_query_policy_officers_perms
         ):
             raise PermissionDenied(_("unauthorized"))
+        queryset = Officer.objects
+        location_id = district if district else region
 
-        qs = Officer.objects
+        if location_id is not None:
+            location = int(location_id)
+            queryset = queryset.filter(
+                Q(officer_villages__location__isnull=False,
+                  officer_villages__location__id=location)  # villages
+                | Q(officer_villages__location__parent_id__isnull=False,
+                    officer_villages__location__parent_id=location)  # municipalities
+                | Q(officer_villages__location__parent__parent_id__isnull=False,
+                    officer_villages__location__parent__parent_id=location)  # districts
+                | Q(officer_villages__location__parent__parent__parent_id__isnull=False,
+                    officer_villages__location__parent__parent__parent_id=location)  # regions
+            ).distinct()
+
         if search is not None:
-            qs = qs.filter(
+            queryset = queryset.filter(
                 Q(code__icontains=search)
                 | Q(last_name__icontains=search)
                 | Q(other_names__icontains=search)
             )
 
-        return qs
+        return queryset
 
 
 class Mutation(graphene.ObjectType):
@@ -285,7 +332,8 @@ def on_policy_mutation(sender, **kwargs):
         return []
     impacted_policies = Policy.objects.filter(uuid__in=uuids).all()
     for policy in impacted_policies:
-        PolicyMutation.objects.create(policy=policy, mutation_id=kwargs['mutation_log_id'])
+        PolicyMutation.objects.create(
+            policy=policy, mutation_id=kwargs['mutation_log_id'])
     return []
 
 
