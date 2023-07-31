@@ -8,7 +8,7 @@ from django import dispatch
 from django.core.exceptions import PermissionDenied
 from django.db import connection
 from django.db.models import Q, Count, Min, Max, Value
-from django.db.models import Sum, F
+from django.db.models import Sum, F, Case, When
 from django.db.models.functions import Coalesce
 from django.template import Template, Context
 from django.utils.translation import gettext as _
@@ -96,6 +96,9 @@ class PolicyService:
 
     def set_deleted(self, policy):
         try:
+            insuree_policies = InsureePolicy.objects.filter(policy=policy)
+            for insuree_policy in insuree_policies:
+                insuree_policy.delete_history()
             policy.delete_history()
             return []
         except Exception as exc:
@@ -144,7 +147,8 @@ class ByFamilyOrInsureeResponseItem(object):
                  ceiling_out_patient,
                  balance,
                  validity_from,
-                 validity_to
+                 validity_to,
+                 max_installments
                  ):
         self.policy_id = policy_id
         self.policy_uuid = policy_uuid
@@ -167,6 +171,7 @@ class ByFamilyOrInsureeResponseItem(object):
         self.balance = balance
         self.validity_from = validity_from
         self.validity_to = validity_to
+        self.max_installments = max_installments
 
     def __eq__(self, other):
         return isinstance(other, self.__class__) and self.__dict__ == other.__dict__
@@ -205,13 +210,33 @@ class FilteredPoliciesService(object):
                 ceiling_ip = row.product.max_ip_insuree - (row.total_rem_ip if row.total_rem_ip else 0)
             if row.product.max_op_insuree:
                 ceiling_op = row.product.max_op_insuree - (row.total_rem_op if row.total_rem_op else 0)
+
+        members_count = row.family.members.count()
+        threshold = row.product.threshold
+        total_rem_g = row.total_rem_g if row.total_rem_g else 0
+        total_rem_ip = row.total_rem_ip if row.total_rem_ip else 0
+        total_rem_op = row.total_rem_op if row.total_rem_op else 0
+
         if row.product.max_policy:
-            ceiling = row.product.max_policy - (row.total_rem_g if row.total_rem_g else 0)
+            max_policy = row.product.max_policy
+            if members_count > threshold:
+                max_policy += (members_count - threshold) * row.product.max_policy_extra_member
+            ceiling = max_policy - total_rem_g
         else:
+            ceiling_ip = 0
             if row.product.max_ip_policy:
-                ceiling_ip = row.product.max_ip_policy - (row.total_rem_ip if row.total_rem_ip else 0)
+                max_ip_policy = row.product.max_ip_policy
+                if members_count > threshold:
+                    max_ip_policy += (members_count - threshold) * row.product.max_policy_extra_member_ip
+                ceiling_ip = max_ip_policy - total_rem_ip
+
+            ceiling_op = 0
             if row.product.max_op_policy:
-                ceiling_op = row.product.max_op_policy - (row.total_rem_op if row.total_rem_op else 0)
+                max_op_policy = row.product.max_op_policy
+                if members_count > threshold:
+                    max_op_policy += (members_count - threshold) * row.product.max_policy_extra_member_op
+                ceiling_op = max_op_policy - total_rem_op
+
         balance = row.value
         if row.total_ded_g:
             balance -= row.total_ded_g
@@ -237,7 +262,8 @@ class FilteredPoliciesService(object):
             ceiling_out_patient=ceiling_op,
             balance=balance,
             validity_from=row.validity_from,
-            validity_to=row.validity_to
+            validity_to=row.validity_to,
+            max_installments=row.product.max_installments,
         )
 
     def build_query(self, req):
@@ -539,6 +565,67 @@ class NativeEligibilityService(object):
     def __init__(self, user):
         self.user = user
 
+
+    def get_eligibility(self, insuree, item_or_service, model, req, now):
+        if insuree.is_adult():
+            waiting_period_field = f"policy__product__{item_or_service}s__waiting_period_adult"
+            limit_field = f"policy__product__{item_or_service}s__limit_no_adult"
+        else:
+            waiting_period_field = f"policy__product__{item_or_service}s__waiting_period_child"
+            limit_field = f"policy__product__{item_or_service}s__limit_no_child"
+
+        item_or_service_code = req.service_code
+        if item_or_service == "item":
+            item_or_service_code = req.item_code
+
+        # TODO validity is checked but should be optional in get_queryset
+        item_or_service_obj = model.get_queryset(None, self.user).get(code__iexact=item_or_service_code)
+
+        # Beware that MonthAdd() is in Gregorian calendar, not Nepalese or anything else
+        queryset_item_or_service = InsureePolicy.objects\
+            .filter(validity_to__isnull=True)\
+            .filter(policy__validity_to__isnull=True)\
+            .filter(**{f"policy__product__{item_or_service}s__validity_to__isnull": True},
+                    **{f"policy__product__{item_or_service}s__{item_or_service}_id": item_or_service_obj.id}) \
+            .filter(policy__status=Policy.STATUS_ACTIVE) \
+            .filter(insuree=insuree) \
+            .filter(Q(insuree__claim__validity_to__isnull=True,
+                      **{f"insuree__claim__{item_or_service}s__{item_or_service}_id": item_or_service_obj.id})
+                    & Q(**{f"insuree__claim__{item_or_service}s__validity_to__isnull": True})
+                    & (Q(**{f"insuree__claim__{item_or_service}s__status": ClaimItem.STATUS_PASSED})
+                       | Q(**{f"insuree__claim__{item_or_service}s__status__isnull": True}))
+                    & (Q(insuree__claim__status__gt=Claim.STATUS_ENTERED)
+                       | Q(insuree__claim__status__isnull=True))) \
+            .values("effective_date",
+                    "policy__product_id",
+                    waiting_period=F(waiting_period_field),
+                    limit_no=F(limit_field)) \
+            .annotate(min_date=MonthsAdd(Coalesce(F(waiting_period_field), 0), "effective_date")) \
+            .annotate(count=Sum(Coalesce(
+                                f"insuree__claim__{item_or_service}s__qty_approved",
+                                f'insuree__claim__{item_or_service}s__qty_provided'
+                            ))) \
+            .annotate(left=F("limit_no") - F("count"))
+
+        min_date_qs = queryset_item_or_service.aggregate(
+            min_date_lte=Min("min_date", filter=Q(min_date__lte=now)),
+            min_date_all=Min("min_date"),
+        )
+        from core import datetime
+        min_date_item = datetime.date.from_ad_date(min_date_qs["min_date_lte"]
+                                                   if min_date_qs["min_date_lte"]
+                                                   else min_date_qs["min_date_all"])
+
+        if queryset_item_or_service.filter(min_date__lte=now).filter(left__isnull=True).first():
+            items_or_services_left = None
+        else:
+            items_or_services_left = queryset_item_or_service\
+                .filter(Q(min_date__isnull=True) | Q(min_date__lte=now))\
+                .aggregate(Max("left"))["left__max"]
+
+        return item_or_service_obj, min_date_item, items_or_services_left
+
+
     def request(self, req, response):
         insuree = Insuree.get_queryset(None, self.user)\
             .filter(validity_to__isnull=True)\
@@ -547,53 +634,7 @@ class NativeEligibilityService(object):
         eligibility = response
 
         if req.service_code:
-            if insuree.is_adult():
-                waiting_period_field = "policy__product__services__waiting_period_adult"
-                limit_field = "policy__product__services__limit_no_adult"
-            else:
-                waiting_period_field = "policy__product__services__waiting_period_child"
-                limit_field = "policy__product__services__limit_no_child"
-
-            # TODO validity is checked but should be optional in get_queryset
-            service = Service.get_queryset(None, self.user).get(code__iexact=req.service_code)
-
-            # Beware that MonthAdd() is in Gregorian calendar, not Nepalese or anything else
-            queryset_svc = InsureePolicy.objects\
-                .filter(validity_to__isnull=True)\
-                .filter(policy__validity_to__isnull=True) \
-                .filter(policy__product__services__validity_to__isnull=True,
-                        policy__product__services__service_id=service.id) \
-                .filter(policy__status=Policy.STATUS_ACTIVE) \
-                .filter(insuree=insuree) \
-                .filter(Q(insuree__claim__validity_to__isnull=True)
-                        & Q(insuree__claim__services__validity_to__isnull=True)
-                        & (Q(insuree__claim__services__status=ClaimService.STATUS_PASSED)
-                            | Q(insuree__claim__services__status__isnull=True))
-                        & (Q(insuree__claim__status__gt=Claim.STATUS_ENTERED)
-                           | Q(insuree__claim__status__isnull=True))) \
-                .values("effective_date",
-                        "policy__product_id",
-                        waiting_period=F(waiting_period_field),
-                        limit_no=F(limit_field))\
-                .annotate(min_date=MonthsAdd(Coalesce(F(waiting_period_field), 0), "effective_date"))\
-                .annotate(services_count=Count("policy__product__services__service_id"))\
-                .annotate(services_left=F("limit_no") - F("services_count"))
-
-            min_date_qs = queryset_svc.aggregate(
-                min_date_lte=Min("min_date", filter=Q(min_date__lte=now)),
-                min_date_all=Min("min_date"),
-            )
-            from core import datetime
-            min_date_service = datetime.date.from_ad_date(
-                min_date_qs["min_date_lte"] if min_date_qs["min_date_lte"]
-                else min_date_qs["min_date_all"])
-
-            if queryset_svc.filter(min_date__lte=now).filter(services_left__isnull=True).first():
-                services_left = None
-            else:
-                services_left = queryset_svc\
-                    .filter(Q(min_date__isnull=True) | Q(min_date__lte=now))\
-                    .aggregate(Max("services_left"))["services_left__max"]
+            service, min_date_service, services_left = self.get_eligibility(insuree, "service", Service, req, now)
         else:
             service = None
             services_left = None
@@ -601,53 +642,8 @@ class NativeEligibilityService(object):
         eligibility.min_date_service = min_date_service
         eligibility.service_left = services_left
 
-        # TODO remove code duplication between service and item
         if req.item_code:
-            if insuree.is_adult():
-                waiting_period_field = "policy__product__items__waiting_period_adult"
-                limit_field = "policy__product__items__limit_no_adult"
-            else:
-                waiting_period_field = "policy__product__items__waiting_period_child"
-                limit_field = "policy__product__items__limit_no_child"
-
-            item = Item.get_queryset(None, self.user).get(code__iexact=req.item_code)
-
-            queryset_item = InsureePolicy.objects\
-                .filter(validity_to__isnull=True)\
-                .filter(policy__validity_to__isnull=True)\
-                .filter(policy__product__items__validity_to__isnull=True,
-                        policy__product__items__item_id=item.id) \
-                .filter(policy__status=Policy.STATUS_ACTIVE) \
-                .filter(insuree=insuree) \
-                .filter(Q(insuree__claim__validity_to__isnull=True)
-                        & Q(insuree__claim__items__validity_to__isnull=True)
-                        & (Q(insuree__claim__items__status=ClaimItem.STATUS_PASSED)
-                            | Q(insuree__claim__items__status__isnull=True))
-                        & (Q(insuree__claim__status__gt=Claim.STATUS_ENTERED)
-                           | Q(insuree__claim__status__isnull=True))) \
-                .values("effective_date",
-                        "policy__product_id",
-                        waiting_period=F(waiting_period_field),
-                        limit_no=F(limit_field))\
-                .annotate(min_date=MonthsAdd(Coalesce(F(waiting_period_field), 0), "effective_date"))\
-                .annotate(items_count=Count("policy__product__items__item_id")) \
-                .annotate(items_left=F("limit_no") - F("items_count"))
-
-            min_date_qs = queryset_item.aggregate(
-                min_date_lte=Min("min_date", filter=Q(min_date__lte=now)),
-                min_date_all=Min("min_date"),
-            )
-            from core import datetime
-            min_date_item = datetime.date.from_ad_date(min_date_qs["min_date_lte"]
-                                                       if min_date_qs["min_date_lte"]
-                                                       else min_date_qs["min_date_all"])
-
-            if queryset_item.filter(min_date__lte=now).filter(items_left__isnull=True).first():
-                items_left = None
-            else:
-                items_left = queryset_item\
-                    .filter(Q(min_date__isnull=True) | Q(min_date__lte=now))\
-                    .aggregate(Max("items_left"))["items_left__max"]
+            item, min_date_item, items_left = self.get_eligibility(insuree, "item", Item, req, now)
         else:
             item = None
             items_left = None
