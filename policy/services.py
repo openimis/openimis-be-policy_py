@@ -986,7 +986,6 @@ HOF{% endif %}
 
 
 def update_insuree_policies(policy, audit_user_id):
-    print("Member Update Insuree policies")
     for member in policy.family.members.filter(validity_to__isnull=True):
         existing_ip = InsureePolicy.objects.filter(validity_to__isnull=True, insuree=member, policy=policy).first()
         if existing_ip:
