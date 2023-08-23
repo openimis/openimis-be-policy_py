@@ -13,6 +13,8 @@ from django.db.models.functions import Coalesce
 from django.template import Template, Context
 from django.utils.translation import gettext as _
 from graphene.utils.str_converters import to_snake_case
+
+from policy.utils import get_queryset_valid_at_date
 from core.signals import register_service_signal
 from insuree.models import Insuree, Family, InsureePolicy
 from insuree.services import create_insuree_renewal_detail
@@ -108,11 +110,12 @@ class PolicyService:
 @core.comparable
 class ByInsureeRequest(object):
 
-    def __init__(self, chf_id, active_or_last_expired_only=False, show_history=False, order_by=None):
+    def __init__(self, chf_id, active_or_last_expired_only=False, show_history=False, order_by=None, target_date=None):
         self.chf_id = chf_id
         self.active_or_last_expired_only = active_or_last_expired_only
         self.show_history = show_history
         self.order_by = order_by
+        self.target_date = target_date
 
     def __eq__(self, other):
         return isinstance(other, self.__class__) and self.__dict__ == other.__dict__
@@ -301,6 +304,8 @@ class ByInsureeService(FilteredPoliciesService):
         res = res.prefetch_related('insuree_policies')
         res = res.filter(insuree_policies__insuree__in=insurees)
         # .distinct('product__code') >> DISTINCT ON fields not supported by MS-SQL
+        if by_insuree_request.target_date:
+            res = get_queryset_valid_at_date(res, by_insuree_request.target_date)
         if by_insuree_request.active_or_last_expired_only:
             products = {}
             for r in res:

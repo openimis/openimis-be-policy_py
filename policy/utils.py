@@ -16,3 +16,13 @@ class MonthsAdd(Func):
 
     output_field = DateTimeField()
     arity = 2
+
+
+def get_queryset_valid_at_date(queryset, date):
+    filtered_qs = queryset.filter(
+        validity_to__gte=date,
+        validity_from__lte=date
+    )
+    if filtered_qs.exists():
+        return filtered_qs
+    return queryset.filter(validity_from__lte=date, validity_to__isnull=True)
