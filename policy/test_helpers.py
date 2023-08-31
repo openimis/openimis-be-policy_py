@@ -1,6 +1,7 @@
 from contribution.models import Premium
 from insuree.models import InsureePolicy
 from policy.models import Policy
+from policy.values import policy_values
 from product.models import Product
 
 
@@ -50,6 +51,10 @@ def create_test_policy2(product, insuree, link=True, valid=True, custom_props=No
         )
     else:
         insuree_policy = None
+
+    policy, warnings = policy_values(policy, insuree.family, None)
+    if warnings:
+        raise Exception("Policy has warnings: {}".format(warnings))
     return policy, insuree_policy
 
 
