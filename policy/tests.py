@@ -7,7 +7,7 @@ from contribution.test_helpers import create_test_premium
 from core.test_helpers import create_test_officer
 from policy.models import Policy
 from policy.test_helpers import create_test_policy2,create_test_policy_with_IPs,create_test_insuree_for_policy
-,from product.test_helpers import create_test_product, create_test_product_service
+from product.test_helpers import create_test_product, create_test_product_service
 
 
 class TaskGroupServiceTest(TestCase):
