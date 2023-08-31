@@ -3,11 +3,11 @@ import logging
 import graphene
 from django.db import transaction
 
-from policy.services import PolicyService
+from policy.services import PolicyService, PolicyRenewalService
 
 from .apps import PolicyConfig
 from core.schema import OpenIMISMutation
-from .models import Policy, PolicyMutation
+from .models import Policy, PolicyMutation, PolicyRenewal
 from django.contrib.auth.models import AnonymousUser
 from django.core.exceptions import ValidationError, PermissionDenied
 from django.utils.translation import gettext as _
@@ -46,6 +46,8 @@ class CreateRenewOrUpdatePolicyMutation(OpenIMISMutation):
         from core.utils import TimeUtils
         data['validity_from'] = TimeUtils.now()
         policy = PolicyService(user).update_or_create(data, user)
+        policy_renewals = PolicyRenewal.objects.filter(policy=policy, validity_to__isnull=True)
+        [PolicyRenewalService(user).delete(policy_renewal) for policy_renewal in policy_renewals]
         PolicyMutation.object_mutated(user, client_mutation_id=client_mutation_id, policy=policy)
         return None
 
@@ -150,6 +152,39 @@ class SuspendPoliciesMutation(OpenIMISMutation):
                 'detail': str(exc),
                 'exc': exc}]
 
+
+class DeletePolicyRenewalsMutation(OpenIMISMutation):
+    _mutation_module = "policy"
+    _mutation_class = "DeletePolicyRenewalsMutation"
+
+    class Input(OpenIMISMutation.Input):
+        uuids = graphene.List(graphene.String)
+
+    @classmethod
+    def async_mutate(cls, user, **data):
+        try:
+            with transaction.atomic():
+                errors = []
+                for policy_renewal_uuid in data["uuids"]:
+                    policy_renewal = PolicyRenewal.objects \
+                        .filter(uuid=policy_renewal_uuid) \
+                        .first()
+                    if policy_renewal is None:
+                        errors += {
+                            'title': policy_renewal_uuid,
+                            'list': [{'message': _(
+                                "policy_renewal.validation.id_does_not_exist") % {'id': policy_renewal_uuid}}]
+                        }
+                        continue
+                    errors += PolicyRenewalService(user).delete(policy_renewal)
+                if len(errors) == 1:
+                    errors = errors[0]['list']
+                return errors
+        except Exception as exc:
+            return [{
+                'message': _("policy_renewal.mutation.failed_to_delete_policies"),
+                'detail': str(exc),
+                'exc': exc}]
 
 class DeletePoliciesMutation(OpenIMISMutation):
     _mutation_module = "policy"
