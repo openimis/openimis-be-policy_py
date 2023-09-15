@@ -25,4 +25,4 @@ def get_queryset_valid_at_date(queryset, date):
     )
     if filtered_qs.exists():
         return filtered_qs
-    return queryset.filter(validity_from__lte=date, validity_to__isnull=True)
+    return queryset.filter(validity_from__date__lte=date, validity_to__isnull=True)
