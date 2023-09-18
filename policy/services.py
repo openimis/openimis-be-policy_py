@@ -7,8 +7,7 @@ from claim.models import ClaimService, Claim, ClaimItem
 from django import dispatch
 from django.core.exceptions import PermissionDenied
 from django.db import connection
-from django.db.models import Q, Count, Min, Max, Value
-from django.db.models import Sum, F, Case, When
+from django.db.models import Q, Count, Min, Max, Sum, F
 from django.db.models.functions import Coalesce
 from django.template import Template, Context
 from django.utils.translation import gettext as _
@@ -600,7 +599,7 @@ class NativeEligibilityService(object):
                     "policy__product_id",
                     waiting_period=F(waiting_period_field),
                     limit_no=F(limit_field)) \
-            .annotate(min_date=MonthsAdd(Coalesce(F(waiting_period_field), 0), "effective_date")) \
+            .annotate(min_date=MonthsAdd("effective_date", Coalesce(F(waiting_period_field), 0))) \
             .annotate(count=Sum(Coalesce(
                                 f"insuree__claim__{item_or_service}s__qty_approved",
                                 f'insuree__claim__{item_or_service}s__qty_provided'
