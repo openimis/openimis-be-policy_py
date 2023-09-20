@@ -52,9 +52,10 @@ def create_test_policy2(product, insuree, link=True, valid=True, custom_props=No
     else:
         insuree_policy = None
 
-    policy, warnings = policy_values(policy, insuree.family, None)
-    if warnings:
-        raise Exception("Policy has warnings: {}".format(warnings))
+    # Was added for OMT-333 but breaks tests that explicitly call policy_values
+    # policy, warnings = policy_values(policy, insuree.family, None)
+    # if warnings:
+    #     raise Exception("Policy has warnings: {}".format(warnings))
     return policy, insuree_policy
 
 
