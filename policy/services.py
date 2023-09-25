@@ -209,29 +209,33 @@ class FilteredPoliciesService(object):
                 ceiling_op = row.product.max_op_insuree - (row.total_rem_op if row.total_rem_op else 0)
 
         members_count = row.family.members.count()
-        threshold = row.product.threshold
+        threshold = row.product.threshold if row.product.threshold else 0
         total_rem_g = row.total_rem_g if row.total_rem_g else 0
         total_rem_ip = row.total_rem_ip if row.total_rem_ip else 0
         total_rem_op = row.total_rem_op if row.total_rem_op else 0
+        extra_member = row.product.max_policy_extra_member if row.product.max_policy_extra_member else 0
+        extra_member_ip = row.product.max_policy_extra_member_ip if row.product.max_policy_extra_member_ip else 0
+        extra_member_op = row.product.max_policy_extra_member_op if row.product.max_policy_extra_member_op else 0
+
 
         if row.product.max_policy:
             max_policy = row.product.max_policy
             if members_count > threshold:
-                max_policy += (members_count - threshold) * row.product.max_policy_extra_member
+                max_policy += (members_count - threshold) * extra_member
             ceiling = max_policy - total_rem_g
         else:
             ceiling_ip = 0
             if row.product.max_ip_policy:
                 max_ip_policy = row.product.max_ip_policy
                 if members_count > threshold:
-                    max_ip_policy += (members_count - threshold) * row.product.max_policy_extra_member_ip
+                    max_ip_policy += (members_count - threshold) * extra_member_ip
                 ceiling_ip = max_ip_policy - total_rem_ip
 
             ceiling_op = 0
             if row.product.max_op_policy:
                 max_op_policy = row.product.max_op_policy
                 if members_count > threshold:
-                    max_op_policy += (members_count - threshold) * row.product.max_policy_extra_member_op
+                    max_op_policy += (members_count - threshold) * extra_member_op
                 ceiling_op = max_op_policy - total_rem_op
 
         balance = row.value
