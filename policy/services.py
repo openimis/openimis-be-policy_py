@@ -209,7 +209,7 @@ class FilteredPoliciesService(object):
                 ceiling_op = row.product.max_op_insuree - (row.total_rem_op if row.total_rem_op else 0)
 
         members_count = row.family.members.count()
-        threshold = row.product.threshold
+        threshold = row.product.threshold if row.product.threshold else 0
         total_rem_g = row.total_rem_g if row.total_rem_g else 0
         total_rem_ip = row.total_rem_ip if row.total_rem_ip else 0
         total_rem_op = row.total_rem_op if row.total_rem_op else 0
