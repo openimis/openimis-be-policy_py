@@ -58,6 +58,7 @@ class Query(graphene.ObjectType):
         active_or_last_expired_only=graphene.Boolean(),
         show_history=graphene.Boolean(),
         order_by=graphene.String(),
+        target_date=graphene.Date(),
     )
     policies_by_family = graphene.relay.ConnectionField(
         PolicyByFamilyOrInsureeConnection,
@@ -200,7 +201,8 @@ class Query(graphene.ObjectType):
             active_or_last_expired_only=kwargs.get(
                 'active_or_last_expired_only', False),
             show_history=kwargs.get('show_history', False),
-            order_by=kwargs.get('order_by', None)
+            order_by=kwargs.get('order_by', None),
+            target_date=kwargs.get('target_date', None)
         )
         res = ByInsureeService(user=info.context.user).request(req)
         return [Query._to_policy_by_family_or_insuree_item(x) for x in res.items]
