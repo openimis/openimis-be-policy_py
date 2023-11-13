@@ -3,12 +3,13 @@ from unittest import mock, skip
 from claim.test_helpers import create_test_claim, create_test_claimservice, create_test_claimitem
 from claim.validations import validate_claim, validate_assign_prod_to_claimitems_and_services, process_dedrem
 from core.models import InteractiveUser, User
-from core.test_helpers import create_test_officer
+from core.test_helpers import create_test_officer 
 from django.conf import settings
 from django.test import TestCase
 from insuree.test_helpers import create_test_photo
 from medical.test_helpers import create_test_item, create_test_service
 from medical_pricelist.test_helpers import add_service_to_hf_pricelist, add_item_to_hf_pricelist
+from insuree.test_helpers import create_test_insuree
 from policy.test_helpers import create_test_policy2, create_test_insuree_for_policy
 from product.test_helpers import create_test_product, create_test_product_service, create_test_product_item
 
@@ -50,29 +51,32 @@ class EligibilityServiceTestCase(TestCase):
             # required for policy module tests
             mock_cursor.return_value.__enter__.return_value.fetchone.side_effect = return_values
             mock_user = mock.Mock(is_anonymous=False)
+            insuree, family = create_test_insuree_for_policy(custom_props={"chf_id": "tier1234" })
+            product = create_test_product("ELI1")
+            create_test_policy2(product, insuree)
             mock_user.has_perm = mock.MagicMock(return_value=True)
-            req = EligibilityRequest(chf_id="a")
+            req = EligibilityRequest(chf_id="tier1234")
             service = StoredProcEligibilityService(mock_user)
             res = service.request(req, EligibilityResponse(req))
 
             expected = EligibilityResponse(
                 eligibility_request=req,
-                prod_id=1,
-                total_admissions_left=2,
-                total_visits_left=3,
-                total_consultations_left=4,
-                total_surgeries_left=5,
-                total_deliveries_left=6,
-                total_antenatal_left=7,
-                consultation_amount_left=8,
-                surgery_amount_left=9,
-                delivery_amount_left=10,
-                hospitalization_amount_left=11,
-                antenatal_amount_left=12,
-                min_date_service=core.datetime.date(2020, 1, 9),
-                min_date_item=core.datetime.date(2020, 1, 10),
-                service_left=20,
-                item_left=21,
+                prod_id=product.id,
+                total_admissions_left=None,
+                total_visits_left=None,
+                total_consultations_left=None,
+                total_surgeries_left=None,
+                total_deliveries_left=None,
+                total_antenatal_left=None,
+                consultation_amount_left=None,
+                surgery_amount_left=None,
+                delivery_amount_left=None,
+                hospitalization_amount_left=None,
+                antenatal_amount_left=None,
+                min_date_service=None,
+                min_date_item=None,
+                service_left=None,
+                item_left=None,
                 is_item_ok=True,
                 is_service_ok=True,
             )

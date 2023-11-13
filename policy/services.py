@@ -269,10 +269,9 @@ class FilteredPoliciesService(object):
 
     def build_query(self, req):
         # TODO: prevent direct dependency on claim_ded structure?
-        res = Policy.objects \
-            .select_related('product') \
-            .select_related('officer') \
-            .prefetch_related('claim_ded_rems') \
+        res = Policy.objects\
+            .prefetch_related('product') \
+            .prefetch_related('officer') \
             .annotate(total_ded_g=Sum('claim_ded_rems__ded_g')) \
             .annotate(total_ded_ip=Sum('claim_ded_rems__ded_ip')) \
             .annotate(total_ded_op=Sum('claim_ded_rems__ded_op')) \
@@ -284,6 +283,8 @@ class FilteredPoliciesService(object):
             .annotate(total_rem_delivery=Sum('claim_ded_rems__rem_delivery')) \
             .annotate(total_rem_hospitalization=Sum('claim_ded_rems__rem_hospitalization')) \
             .annotate(total_rem_antenatal=Sum('claim_ded_rems__rem_antenatal'))
+                
+        res.query.group_by = ['id']
         if not req.show_history:
             res = res.filter(*core.filter_validity())
         if req.active_or_last_expired_only:
