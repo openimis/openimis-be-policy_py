@@ -46,6 +46,7 @@ class Query(graphene.ObjectType):
         balance_gte=graphene.Float(),
         showHistory=graphene.Boolean(),
         showInactive=graphene.Boolean(),
+        confirmationType=graphene.String(),
         orderBy=graphene.List(of_type=graphene.String),
     )
     # Note:
@@ -154,6 +155,8 @@ class Query(graphene.ObjectType):
             query = query.filter(balance__lte=kwargs.get('balance_lte'))
         if kwargs.get('balance_gte'):
             query = query.filter(balance__gte=kwargs.get('balance_gte'))
+        if kwargs.get('confirmationType'):
+            query = query.filter(family__confirmation_type=kwargs.get('confirmationType'))
         location_id = kwargs.get('district_id') if kwargs.get(
             'district_id') else kwargs.get('region_id')
         if location_id:
