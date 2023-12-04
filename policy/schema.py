@@ -100,7 +100,7 @@ class Query(graphene.ObjectType):
         product = Product.objects.filter(
             Q(validity_to__isnull=True),
             Q(id=kwargs.get('product_id')) | Q(legacy_id=kwargs.get('product_id')),
-            Q(validity_from__date__lte=kwargs.get('enrollDate')),
+            Q(validity_from__date__lte=kwargs.get('enrollDate')) | Q(date_from__lte=kwargs.get('enrollDate')),
         ).order_by('-validity_from').first()
 
         if not product:
