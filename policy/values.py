@@ -43,7 +43,7 @@ def set_start_date(policy):
     elif policy.stage == Policy.STAGE_RENEWED and product.grace_period_renewal:
         grace = product.grace_period_renewal
 
-    ref_date     = (datetime.date.from_ad_date(ref_enroll_date) - datetimedelta(months=grace)).to_ad_date()
+    ref_date = (datetime.date.from_ad_date(ref_enroll_date) - datetimedelta(months=grace)).to_ad_date()
     for i in range(4):
         start = cycle_start(product, i, ref_date)
         if start:
