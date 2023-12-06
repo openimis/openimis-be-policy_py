@@ -6,12 +6,19 @@ from .models import Policy
 
 from core.apps import CoreConfig
 from dateutil.relativedelta import relativedelta
+from core.apps import CoreConfig
+
 
 def cycle_start(product, cycle, ref_date):
     c = getattr(product, "start_cycle_%s" % (cycle + 1), None)
     if not c:
         return None
-    start = py_datetime.datetime.strptime("%s-%s" % (c, ref_date.year), '%d-%m-%Y')
+    if CoreConfig.secondary_calendar == 'Nepal':
+        import nepali_datetime
+        nepali_start = nepali_datetime.datetime.strptime("%s-%s" % (c, nepali_datetime.date.today().year), '%d-%m-%Y')
+        start = nepali_start.to_datetime_date()
+    else:
+        start = py_datetime.datetime.strptime("%s-%s" % (c, ref_date.year), '%d-%m-%Y')
     if ref_date <= start:
         return start
 
