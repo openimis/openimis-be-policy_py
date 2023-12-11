@@ -56,8 +56,8 @@ class EligibilityServiceTestCase(TestCase):
             create_test_policy2(product, insuree)
             mock_user.has_perm = mock.MagicMock(return_value=True)
             req = EligibilityRequest(chf_id="tier1234")
-            service = StoredProcEligibilityService(mock_user)
-            res = service.request(req, EligibilityResponse(req))
+            service = EligibilityService(mock_user)
+            res = service.request(req)
 
             expected = EligibilityResponse(
                 eligibility_request=req,
@@ -82,8 +82,9 @@ class EligibilityServiceTestCase(TestCase):
             )
             self.assertEquals(expected, res)
 
-    @skip("skip test that uses sp")
     def test_eligibility_sp_call(self):
+        if not connection.vendor == "mssql":
+            self.skipTest("This test can only be executed for MSSQL database")
         mock_user = mock.Mock(is_anonymous=False)
         mock_user.has_perm = mock.MagicMock(return_value=True)
         req = EligibilityRequest(chf_id="070707070")
