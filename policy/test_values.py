@@ -106,7 +106,7 @@ class PolicyValuesTestCase(TestCase):
         self.assertEquals(policy.value, 445)  # 200 + 1 x 200 + 3 x 10 + 3 x 5
 
     def test_new_policy_admin_period_max_members_insurance_period(self):
-        head_insuree = create_test_insuree(with_family=True, custom_props={"dob": core.datetime.date(1985, 5, 5)})
+        head_insuree = create_test_insuree(with_family=True, custom_props={"chf_id":"tnpapmmip","dob": core.datetime.date(1985, 5, 5)})
         spouse = Relation.objects.get(id=8)
         create_test_insuree(with_family = False,
             custom_props={
@@ -149,8 +149,9 @@ class PolicyValuesTestCase(TestCase):
                 "family": head_insuree.family
             })
         policy = create_test_policy(product, head_insuree, custom_props={
-            "enroll_date": core.datetime.date(2021, 12, 11),
-        })
+                "enroll_date": core.datetime.date(2021, 12, 11),
+            }, check = False)
+
         policy, warnings = policy_values(policy, head_insuree.family, None)
         self.assertEquals(policy.start_date, core.datetime.date(2022, 1, 1))  # enroll + admin in cycle 1 + grace
         self.assertEquals(policy.expiry_date, core.datetime.date(2022, 6, 30))
