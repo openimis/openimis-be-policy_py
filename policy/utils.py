@@ -1,4 +1,5 @@
 from django.db.models import Func, DateTimeField
+from django.db.models.functions import Cast, Coalesce
 
 
 class MonthsAdd(Func):
@@ -17,13 +18,17 @@ class MonthsAdd(Func):
 
     output_field = DateTimeField()
     arity = 2
+    COUNTER = 0
 
     def as_sql(self, compiler, connection, **extra_context):
+
         if connection.vendor == 'microsoft':
             self.arg_joiner = ', '
-            self.source_expressions = self.get_source_expressions[::-1]
+            self.source_expressions = self.get_source_expressions(
+            )[::-1] if self.COUNTER == 0 else self.get_source_expressions()
             self.template = self.template_mssql
             self.function = self.function_mssql
+        self.COUNTER += 1
         return super().as_sql(compiler, connection, **extra_context)
 
 
@@ -32,6 +37,6 @@ def get_queryset_valid_at_date(queryset, date):
         validity_to__gte=date,
         validity_from__lte=date
     )
-    if len(filtered_qs)>0:
+    if len(filtered_qs) > 0:
         return filtered_qs
     return queryset.filter(validity_from__date__lte=date, validity_to__isnull=True)
