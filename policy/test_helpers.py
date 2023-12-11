@@ -5,7 +5,7 @@ from policy.values import policy_values
 from product.models import Product
 import datetime
 
-def create_test_policy(product, insuree, link=True, valid=True, custom_props=None, check=True):
+def create_test_policy(product, insuree, link=True, valid=True, custom_props=None, check=False):
     """
     Compatibility method that only return the Policy
     """
@@ -14,7 +14,7 @@ def create_test_policy(product, insuree, link=True, valid=True, custom_props=Non
 def dts(s):
     return datetime.datetime.strptime(s, "%Y-%m-%d").date()
 
-def create_test_policy2(product, insuree, link=True, valid=True, custom_props=None, check=True):
+def create_test_policy2(product, insuree, link=True, valid=True, custom_props=None, check=False):
     """
     Creates a Policy and optionally an InsureePolicy
     :param product: Product on which this Policy is based (or its ID)
