@@ -1,6 +1,7 @@
 from contribution.models import Premium
 from insuree.models import InsureePolicy, Family, Gender, Insuree
 from policy.models import Policy
+from policy.values import policy_values
 from product.models import Product
 
 
@@ -50,6 +51,11 @@ def create_test_policy2(product, insuree, link=True, valid=True, custom_props=No
         )
     else:
         insuree_policy = None
+
+    # Was added for OMT-333 but breaks tests that explicitly call policy_values
+    # policy, warnings = policy_values(policy, insuree.family, None)
+    # if warnings:
+    #     raise Exception("Policy has warnings: {}".format(warnings))
     return policy, insuree_policy
 
 
