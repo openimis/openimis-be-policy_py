@@ -44,7 +44,7 @@ class Policy(core_models.VersionedModel):
     def sum_premiums(self, photo = False):
         return Policy.objects.filter(id=self.id).aggregate(
                 sum_premiums=Policy.get_query_sum_premium(photo)
-                )['sum_premiums']
+                )['sum_premiums'] or 0
 
     def claim_ded_rems(self):
         return self.claim_ded_rems
