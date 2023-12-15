@@ -144,13 +144,13 @@ class Query(graphene.ObjectType):
                     'm_count')) - Subquery(covered_sq.values('i_count'))
             )
             query = query.filter(inactive_count__gt=0)
+        if kwargs.get('balance_lte') or kwargs.get('balance_gte') or kwargs.get('sum_premiums', False):
+            query=query.annotate(
+                sum_premiums=Policy.get_query_sum_premium()
+                )
         if kwargs.get('balance_lte') or kwargs.get('balance_gte'):
-            sum_premiums = Premium.objects.filter(is_photo_fee=False).values(
-                'policy_id').annotate(sum=Sum('amount'))
-            sum_premiums_subquery = sum_premiums.filter(
-                policy_id=OuterRef('id'))
             query = query.annotate(
-                balance=F('value') - Subquery(sum_premiums_subquery.values('sum')))
+                balance=F('value') - F('sum_premiums'))
         if kwargs.get('balance_lte'):
             query = query.filter(balance__lte=kwargs.get('balance_lte'))
         if kwargs.get('balance_gte'):

@@ -32,7 +32,7 @@ class PolicyGraphQLTestCase(GraphQLTestCase):
         response = self.query(
             '''
             query {
-                policies(first: 10,orderBy: ["-enrollDate"])
+                policies(first: 10,orderBy: ["-enrollDate"], balanceLte: 100)
                 {
                     totalCount
                     pageInfo { hasNextPage, hasPreviousPage, startCursor, endCursor}
