@@ -3,7 +3,7 @@ from unittest import mock, skip
 from claim.test_helpers import create_test_claim, create_test_claimservice, create_test_claimitem
 from claim.validations import validate_claim, validate_assign_prod_to_claimitems_and_services, process_dedrem
 from core.models import InteractiveUser, User
-from core.test_helpers import create_test_officer 
+from core.test_helpers import create_test_officer
 from django.conf import settings
 from django.test import TestCase
 from insuree.test_helpers import create_test_photo
@@ -33,6 +33,7 @@ class EligibilityServiceTestCase(TestCase):
                 service.request(req)
             mock_user.has_perms.assert_called_with(PolicyConfig.gql_query_eligibilities_perms)
 
+    @skip("this test hangs on psql, the mock destroys normal queries happening inside EligibilityRequest")
     def test_eligibility_request_all_good(self):
         with mock.patch("django.db.backends.utils.CursorWrapper") as mock_cursor:
             return_values = [
