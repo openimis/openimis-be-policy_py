@@ -5,7 +5,7 @@ from datetime import datetime as py_datetime, date as py_date
 import core
 from claim.models import ClaimService, Claim, ClaimItem
 from django import dispatch
-from django.core.exceptions import PermissionDenied
+from django.core.exceptions import ValidationError, PermissionDenied
 from django.db import connection
 from django.db.models import Q, Count, Min, Max, Sum, F
 from django.db.models.functions import Coalesce
@@ -62,6 +62,9 @@ class PolicyService:
 
     @register_service_signal('policy_service.create')
     def create_policy(self, data, user):
+        if PolicyConfig.minimum_policy_effective_date != 0:
+            if (py_date.today() - data.get('enroll_date')).days > PolicyConfig.minimum_policy_effective_date:
+                raise ValidationError(_("mutation.minimum_effective_date_not_met"))
         data = self._clean_mutation_info(data)
         policy = Policy.objects.create(**data)
         policy.save()

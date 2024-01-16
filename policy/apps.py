@@ -21,6 +21,7 @@ DEFAULT_CFG = {
     "ACTIVATION_OPTION_CONTRIBUTION": 1,
     "CTIVATION_OPTION_PAYMENT": 2,
     "ACTIVATION_OPTION_READY": 3,
+    "minimum_policy_effective_date": 0,
 }
 
 
@@ -44,6 +45,7 @@ class PolicyConfig(AppConfig):
     ACTIVATION_OPTION_PAYMENT = None
     ACTIVATION_OPTION_READY = None
     activation_option = None
+    minimum_policy_effective_date = None
 
     def __load_config(self, cfg):
         for field in cfg:
