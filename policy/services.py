@@ -50,6 +50,8 @@ class PolicyService:
 
     @register_service_signal('policy_service.update')
     def update_policy(self, data, user):
+        if "is_paid" in data:
+            data.pop("is_paid")
         data = self._clean_mutation_info(data)
         policy_uuid = data.pop('uuid') if 'uuid' in data else None
         policy = Policy.objects.get(uuid=policy_uuid)
@@ -62,6 +64,7 @@ class PolicyService:
 
     @register_service_signal('policy_service.create')
     def create_policy(self, data, user):
+        is_paid = data.pop("is_paid", False)
         data = self._clean_mutation_info(data)
         policy = Policy.objects.create(**data)
         policy.save()
