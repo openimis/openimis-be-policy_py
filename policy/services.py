@@ -69,7 +69,25 @@ class PolicyService:
         policy = Policy.objects.create(**data)
         policy.save()
         update_insuree_policies(policy, user.id_for_audit)
+        if is_paid:
+            from contribution.gql_mutations import premium_action
+            premium_data = {"policy_uuid": policy.uuid, "amount": policy.value,
+                            "receipt": self.generate_contribution_receipt(policy.product, policy.enroll_date),
+                            "pay_date": data["enroll_date"], "pay_type": "C"}
+            premium_action(premium_data, user)
         return policy
+
+    def generate_contribution_receipt(self, product, enroll_date):
+        from contribution.models import Premium
+        code_length = PolicyConfig.contribution_receipt_length
+        if not code_length and type(code_length) is not int:
+            raise ValueError("Invalid config for `generate_contribution_receipt`, expected `code_length` value.")
+        prefix = "RE-" + str(product.code) + "-" + str(enroll_date) + "-"
+        last_contribution = Premium.objects.filter(validity_to__isnull=True, receipt__icontains=prefix)
+        code = 0
+        if last_contribution:
+            code = int(last_contribution.latest('receipt').receipt[-code_length:])
+        return prefix + str(code + 1).zfill(code_length)
 
     def _clean_mutation_info(self, data):
         if "client_mutation_id" in data:
