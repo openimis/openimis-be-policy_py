@@ -5,7 +5,7 @@ from datetime import datetime as py_datetime, date as py_date
 import core
 from claim.models import ClaimService, Claim, ClaimItem
 from django import dispatch
-from django.core.exceptions import PermissionDenied
+from django.core.exceptions import PermissionDenied, ValidationError
 from django.db import connection
 from django.db.models import Q, Count, Min, Max, Sum, F
 from django.db.models.functions import Coalesce
@@ -65,15 +65,22 @@ class PolicyService:
     @register_service_signal('policy_service.create')
     def create_policy(self, data, user):
         is_paid = data.pop("is_paid", False)
+        receipt = data.pop("receipt", None)
         data = self._clean_mutation_info(data)
         policy = Policy.objects.create(**data)
+        if receipt is not None:
+            from contribution.services import check_unique_premium_receipt_code_within_product
+            is_invalid = check_unique_premium_receipt_code_within_product(code=receipt, policy_uuid=policy.uuid)
+            if is_invalid:
+                raise ValidationError("Receipt already exist for a given product.")
+        else:
+            receipt = self.generate_contribution_receipt(policy.product, policy.enroll_date)
         policy.save()
         update_insuree_policies(policy, user.id_for_audit)
         if is_paid:
             from contribution.gql_mutations import premium_action
             premium_data = {"policy_uuid": policy.uuid, "amount": policy.value,
-                            "receipt": self.generate_contribution_receipt(policy.product, policy.enroll_date),
-                            "pay_date": data["enroll_date"], "pay_type": "C"}
+                            "receipt": receipt, "pay_date": data["enroll_date"], "pay_type": "C"}
             premium_action(premium_data, user)
         return policy
 
