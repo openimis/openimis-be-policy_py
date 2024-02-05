@@ -2,7 +2,7 @@ import graphene
 from graphene_django import DjangoObjectType
 from django.utils.translation import gettext as _
 from .apps import PolicyConfig
-from .models import Policy, PolicyRenewal
+from .models import Policy, PolicyRenewal, PolicyMutation
 from core import prefix_filterset, filter_validity, ExtendedConnection, ExtendedRelayConnection
 from core.schema import OfficerGQLType
 from product.schema import ProductGQLType
@@ -110,3 +110,7 @@ class EligibilityGQLType(graphene.ObjectType):
     is_item_ok = graphene.Boolean()
     is_service_ok = graphene.Boolean()
 
+
+class PolicyMutationGQLType(DjangoObjectType):
+    class Meta:
+        model = PolicyMutation

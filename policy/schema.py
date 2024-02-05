@@ -331,6 +331,7 @@ class Mutation(graphene.ObjectType):
     create_policy = CreatePolicyMutation.Field()
     update_policy = UpdatePolicyMutation.Field()
     delete_policies = DeletePoliciesMutation.Field()
+    delete_policy_renewals = DeletePolicyRenewalsMutation.Field()
     renew_policy = RenewPolicyMutation.Field()
     suspend_policies = SuspendPoliciesMutation.Field()
 

@@ -20,6 +20,7 @@ from policy.apps import PolicyConfig
 from policy.utils import MonthsAdd
 
 from .models import Policy, PolicyRenewal
+from .validations import validate_idle_policy
 
 logger = logging.getLogger(__name__)
 
@@ -40,9 +41,12 @@ class PolicyRenewalService:
 
     def delete(self, policy_renewal):
         try:
+            logger.info(f"Deleting policy renewal {policy_renewal.uuid}")
+            policy_renewal.audit_user_id = self.user.id_for_audit
             policy_renewal.delete_history()
             logger.info(f"Deleting the related policy renewal details, if any")
             for detail in policy_renewal.details.all():
+                detail.audit_user_id = self.user.id_for_audit
                 detail.delete_history()
             return []
         except Exception as exc:
@@ -810,6 +814,7 @@ class NativeEligibilityService(object):
 
 
 def insert_renewals(date_from=None, date_to=None, officer_id=None, reminding_interval=None, location_id=None, location_levels=4):
+    logger.info("Insert renewals: start")
     if reminding_interval is None:
         reminding_interval = PolicyConfig.policy_renewal_interval
     from core import datetime
@@ -818,8 +823,10 @@ def insert_renewals(date_from=None, date_to=None, officer_id=None, reminding_int
         status__in=[Policy.STATUS_EXPIRED, Policy.STATUS_ACTIVE],
         validity_to__isnull=True,
     )
+    logger.info(f"Insert renewals: before filtering policies - total {policies.count()}")
     if reminding_interval:
         policies = policies.filter(expiry_date__lte=now + core.datetimedelta(days=reminding_interval))
+    logger.info(f"Insert renewals: after filtering policies - total {policies.count()}")
     if location_id:
         # TODO support the various levels
         policies = policies.filter(
@@ -838,6 +845,7 @@ def insert_renewals(date_from=None, date_to=None, officer_id=None, reminding_int
     policies = policies.prefetch_related("product")
 
     for policy in policies:
+        logger.info(f"Insert renewals: policy {policy.id}-{policy.uuid} - for family {policy.family.id} ({policy.family.head_insuree.chf_id})")
         renewal_warning = 0
         renewal_date = policy.expiry_date + core.datetimedelta(days=1)
         product = policy.product  # will be updated if there is a conversion product
@@ -877,8 +885,9 @@ def insert_renewals(date_from=None, date_to=None, officer_id=None, reminding_int
         # Check if the policy has another following policy
         following_policies = Policy.objects.filter(family_id=policy.family_id) \
             .filter(Q(product_id=policy.product_id) | Q(product_id=product.id)) \
-            .filter(start_date__gte=renewal_date)
+            .filter(start_date__gte=renewal_date) # Add validity to check
         if not following_policies.first():
+            logger.info(f"Insert renewals: checks done, there should be a renewal for policy {policy.id}-{policy.uuid}")
             policy_renewal, policy_renewal_created = PolicyRenewal.objects.get_or_create(
                 policy=policy,
                 validity_to=None,
@@ -897,7 +906,12 @@ def insert_renewals(date_from=None, date_to=None, officer_id=None, reminding_int
                 )
             )
             if policy_renewal_created:
+                logger.info(f"Insert renewals: creating renewal for policy {policy.id}-{policy.uuid}")
                 create_insuree_renewal_detail(policy_renewal)  # The insuree module can create additional renewal data
+            else:
+                logger.info(f"Insert renewals: renewal for policy {policy.id}-{policy.uuid} already exists - {policy_renewal.uuid}")
+        else:
+            logger.info(f"Insert renewals: checks done, no renewal for policy {policy.id}-{policy.uuid}")
 
 
 def update_renewals():
@@ -1034,3 +1048,30 @@ def policy_status_payment_matched(policy):
     if PolicyConfig.activation_option == PolicyConfig.ACTIVATION_OPTION_PAYMENT \
             and policy.status == Policy.STATUS_IDLE:
         policy.status = Policy.STATUS_ACTIVE
+
+
+def process_create_renew_or_update_policy(user, data):
+    errors = validate_idle_policy(data)
+    if len(errors):
+        return None, errors
+    data['audit_user_id'] = user.id_for_audit
+    from core.utils import TimeUtils
+    data['validity_from'] = TimeUtils.now()
+    logger.info("Before policy create_or_update")
+    policy = PolicyService(user).update_or_create(data, user)
+    logger.info(f"After policy create_or_update: {policy.uuid}")
+    if "stage" in data and data["stage"] == Policy.STAGE_RENEWED:
+        logger.info("Deleting the optional PolicyRenewals after renewing")
+        previous_policy = (Policy.objects.filter(validity_to__isnull=True,
+                                                 family_id=data["family_id"],
+                                                 product_id=data["product_id"],
+                                                 status__in=[Policy.STATUS_EXPIRED, Policy.STATUS_ACTIVE])
+                                         .order_by("-id")
+                                         .first())
+        if not previous_policy:
+            logger.error("Can't find the policy that was renewed - not deleting the PolicyRenewals")
+        else:
+            policy_renewals = PolicyRenewal.objects.filter(policy=previous_policy, validity_to__isnull=True)
+            logger.info(f"Total PolicyRenewals found: {policy_renewals.count()}")
+            [PolicyRenewalService(user).delete(policy_renewal) for policy_renewal in policy_renewals]
+    return policy, None

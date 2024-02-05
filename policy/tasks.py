@@ -25,6 +25,7 @@ def get_policies_for_renewal(interval=None, region=None, district=None, ward=Non
     :param sms_header_template: Also a Django template for the SMS header
     :return: nothing
     """
+    logger.info("Policy renewal task triggered")
     for item in [region, district, ward, village]:
         if item:
             location = item
