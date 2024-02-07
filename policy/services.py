@@ -43,6 +43,8 @@ class PolicyService:
     @register_service_signal('policy_service.create_or_update')
     def update_or_create(self, data, user):
         policy_uuid = data.get('uuid', None)
+        if 'enroll_date' in data and data['enroll_date'] > py_date.today():
+            raise ValidationError("policy.enroll_date_in_the_future")
         if policy_uuid:
             return self.update_policy(data, user)
         else:
