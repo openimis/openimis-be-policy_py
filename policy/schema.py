@@ -15,7 +15,6 @@ from django.utils.translation import gettext as _
 import graphene_django_optimizer as gql_optimizer
 from graphene_django.filter import DjangoFilterConnectionField
 from core.models import Officer
-from .models import PolicyMutation, PolicyRenewalMutation
 from product.models import Product
 from contribution.models import Premium
 from insuree.models import Family, Insuree, InsureePolicy
@@ -95,7 +94,14 @@ class Query(graphene.ObjectType):
     policy_renewals = DjangoFilterConnectionField(PolicyRenewalGQLType)
 
     def resolve_policy_renewals(self, info, **kwargs):
-        return PolicyRenewal.objects.filter(validity_to__isnull=True)
+        if not info.context.user.has_perms(PolicyConfig.gql_mutation_renew_policies_perms):
+            raise PermissionDenied(_("unauthorized"))
+        user = info.context.user
+        filters = Q(validity_to__isnull=True)
+        if hasattr(user, "is_imis_admin") and not user.is_imis_admin:
+            enrollment_officer = user.officer
+            filters &= Q(new_officer=enrollment_officer)
+        return PolicyRenewal.objects.filter(filters)
 
     def resolve_policy_values(self, info, **kwargs):
         if not info.context.user.has_perms(PolicyConfig.gql_query_policies_perms):
@@ -325,7 +331,6 @@ class Mutation(graphene.ObjectType):
     create_policy = CreatePolicyMutation.Field()
     update_policy = UpdatePolicyMutation.Field()
     delete_policies = DeletePoliciesMutation.Field()
-    delete_policy_renewals = DeletePolicyRenewalsMutation.Field()
     renew_policy = RenewPolicyMutation.Field()
     suspend_policies = SuspendPoliciesMutation.Field()
 
@@ -343,20 +348,6 @@ def on_policy_mutation(sender, **kwargs):
             policy=policy, mutation_id=kwargs['mutation_log_id'])
     return []
 
-def on_policy_renewal_mutation(sender, **kwargs):
-    uuids = kwargs['data'].get('uuids', [])
-    if not uuids:
-        uuid = kwargs['data'].get('policy_renewal_uuid', None)
-        uuids = [uuid] if uuid else []
-    if not uuids:
-        return []
-    impacted_policy_renewals = PolicyRenewal.objects.filter(uuid__in=uuids).all()
-    for policy_renewal in impacted_policy_renewals:
-        PolicyRenewalMutation.objects.create(
-            policy_renewal=policy_renewal, mutation_id=kwargs['mutation_log_id'])
-    return []
-
 
 def bind_signals():
     signal_mutation_module_validate["policy"].connect(on_policy_mutation)
-    signal_mutation_module_validate["policy"].connect(on_policy_renewal_mutation)
