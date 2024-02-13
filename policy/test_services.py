@@ -14,6 +14,7 @@ from policy.test_helpers import create_test_policy2, create_test_insuree_for_pol
 from product.test_helpers import create_test_product, create_test_product_service, create_test_product_item
 
 from .services import *
+from .models import Policy
 
 
 class EligibilityServiceTestCase(TestCase):
@@ -603,3 +604,46 @@ class RenewalsTestCase(TestCase):
         family_oldpic.delete()
         insuree_newpic.delete()
         family_newpic.delete()
+
+    def test_update_or_create(self):
+        import datetime
+        insuree, family = create_test_insuree_for_policy(
+            custom_props={"chf_id": "TESTCHFSMS", "phone": "+33644444719"},
+            family_custom_props={"location_id": 62},
+        )
+        product = create_test_product("VISIT", custom_props={"age_minimal":1})
+        officer = create_test_officer(custom_props={"phone": "+32444444444", "phone_communication": True})
+        data = {
+            "enroll_date": datetime.datetime.strptime("2024-02-13", "%Y-%m-%d").date(),
+            "start_date": datetime.datetime.strptime("2024-02-13", "%Y-%m-%d").date(),
+            "expiry_date": datetime.datetime.strptime("2024-02-13", "%Y-%m-%d").date(),
+            "value": "0.00",
+            "product_id": product.id,
+            "family_id": family.id,
+            "officer_id": officer.id,
+            "audit_user_id": 978911
+        }
+        policy_service = PolicyService(user=self.user)
+        policy = policy_service.update_or_create(data=data, user=self.user)
+        # No problem, the policy should be created
+        self.assertGreater(policy.id, 0)
+
+        # Let's change the min age so that it should be greater than the insuree's age
+        product2 = create_test_product("VISIT", custom_props={"age_minimal": 70})
+        data["product_id"] = product2.id
+        with self.assertRaises(Exception):
+            policy_service.update_or_create(data=data, user=self.user)
+
+        # Let's change back the min age and set the max age now
+        product3 = create_test_product("VISIT", custom_props={"age_minimal": 1, "age_maximal": 25})
+        data["product_id"] = product3.id
+        with self.assertRaises(Exception):
+            policy_service.update_or_create(data=data, user=self.user)
+
+        # tearDown
+        policy.insuree_policies.all().delete()
+        policy.delete()
+        insuree.delete()
+        family.delete()
+        product.delete()
+        officer.delete()
