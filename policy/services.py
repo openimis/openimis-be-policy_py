@@ -60,7 +60,6 @@ class PolicyService:
                         raise Exception("L'assuré(e) avec l'age %s n'a pas encore l'age minimal requis renseigné sur le produit qui est de %s" % (str(age_patient), str(product.age_minimal)))
                 if product.age_maximal:
                     diff = product.age_maximal - age_patient
-                    print("diff ", diff)
                     if(diff < 0):
                         # The insuree's age is greater than the max age
                         raise Exception("L'assuré(e) avec l'age %s a dépassé(e) l'age maximal renseigné sur le produit qui est de %s" % (str(age_patient), str(product.age_maximal)))

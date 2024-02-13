@@ -84,8 +84,6 @@ def set_expiry_date(policy, family, enroll_date):
         from dateutil.relativedelta import relativedelta
         exp_date = the_date + relativedelta(years=+diff)
         policy.expiry_date = exp_date
-    else:
-        print("The product does not have the max age")
 
 
 def family_counts(product, family):
