@@ -68,6 +68,7 @@ class PolicyService:
     def create_policy(self, data, user):
         is_paid = data.pop("is_paid", False)
         receipt = data.pop("receipt", None)
+        payer_uuid = data.pop("payer_uuid", None)
         data = self._clean_mutation_info(data)
         policy = Policy.objects.create(**data)
         if receipt is not None:
@@ -83,6 +84,8 @@ class PolicyService:
             from contribution.gql_mutations import premium_action
             premium_data = {"policy_uuid": policy.uuid, "amount": policy.value,
                             "receipt": receipt, "pay_date": data["enroll_date"], "pay_type": "C"}
+            if payer_uuid is not None:
+                premium_data["payer_uuid"] = payer_uuid
             premium_action(premium_data, user)
         return policy
 
