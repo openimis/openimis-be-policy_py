@@ -1,9 +1,11 @@
 import base64
 import json
 from dataclasses import dataclass
+from core.utils import filter_validity
 from core.models import User
 from core.test_helpers import create_test_interactive_user
 from django.conf import settings
+from medical.models import Service 
 from graphene_django.utils.testing import GraphQLTestCase
 from graphql_jwt.shortcuts import get_token
 #credits https://docs.graphene-python.org/projects/django/en/latest/testing/
@@ -86,3 +88,25 @@ class PolicyGraphQLTestCase(GraphQLTestCase):
         self.assertResponseNoErrors(response)
 
        
+   
+    def test_insuree_policy_query(self):
+        
+        response = self.query(
+            f'''
+{{
+  policyServiceEligibilityByInsuree(chfId:"070707070", serviceCode:"{Service.objects.filter(*filter_validity()).order_by('id').first().code}")
+  {{
+    minDateService, serviceLeft, isServiceOk
+  }}
+}}
+            ''',
+            headers={"HTTP_AUTHORIZATION": f"Bearer {self.admin_token}"},
+        )
+
+        content = json.loads(response.content)
+
+        # This validates the status code and if you get errors
+        self.assertResponseNoErrors(response)
+
+        # Add some more asserts if you like
+        ...

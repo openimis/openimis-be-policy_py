@@ -653,7 +653,7 @@ class NativeEligibilityService(object):
                                                    if min_date_qs["min_date_lte"]
                                                    else min_date_qs["min_date_all"])
 
-        if queryset_item_or_service.filter(min_date__lte=now).filter(left__isnull=True).first():
+        if queryset_item_or_service.filter(min_date__lte=now).filter(left__isnull=True).order_by('-validity_from').first():
             items_or_services_left = None
         else:
             items_or_services_left = queryset_item_or_service\
@@ -740,6 +740,7 @@ class NativeEligibilityService(object):
                                                   filter=get_total_filter(Service.CATEGORY_VISIT),
                                                   distinct=True), 0)) \
             .annotate(total_visits_left=F("policy__product__max_no_visits") - F("total_visits")) \
+            .order_by('-expiry_date')\
             .first()
 
         if result is None:
