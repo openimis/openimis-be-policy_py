@@ -12,9 +12,12 @@ from medical_pricelist.test_helpers import add_service_to_hf_pricelist, add_item
 from insuree.test_helpers import create_test_insuree
 from policy.test_helpers import create_test_policy2, create_test_insuree_for_policy
 from product.test_helpers import create_test_product, create_test_product_service, create_test_product_item
-
+from location.test_helpers import create_test_health_facility
 from .services import *
-
+from medical_pricelist.test_helpers import (
+    create_test_item_pricelist,
+    create_test_service_pricelist
+)
 
 class EligibilityServiceTestCase(TestCase):
     def setUp(self) -> None:
@@ -330,7 +333,12 @@ class EligibilityServiceTestCase(TestCase):
         insuree.delete()
 
     def test_eligibility_signal(self):
+        
         insuree, family = create_test_insuree_for_policy()
+        #spl = create_test_service_pricelist(location_id=family.location.parent.id)
+        #ipl = create_test_item_pricelist(location_id=family.location.parent.id)
+        #hf =create_test_health_facility(code= 'tst-18', location_id=family.location.parent.id,  custom_props={'id':18, 'items_pricelist': ipl, 'services_pricelist': spl })
+
         product = create_test_product("ELI1")
         (policy, insuree_policy) = create_test_policy2(product, insuree)
         item = create_test_item("A")
@@ -475,12 +483,11 @@ class RenewalsTestCase(TestCase):
         from core import datetime, datetimedelta
 
         insuree, family = create_test_insuree_for_policy(
-            custom_props={"chf_id": "TESTCHFSMS", "phone": "+33644444719"},
-            family_custom_props={"location_id": 62},
-        )
+            custom_props={"chf_id": "TESTCHFSMS", 'last_name':'Test Last',"phone": "+33644444719"}        )
         product = create_test_product("VISIT")
         officer = create_test_officer(
-            custom_props={"phone": "+32444444444", "phone_communication": True}
+            custom_props={"phone": "+32444444444", "phone_communication": True},
+            villages = [family.location]
         )
 
         (policy_expiring, _) = create_test_policy2(
@@ -518,9 +525,9 @@ class RenewalsTestCase(TestCase):
         officer_sms = [sms for sms in sms_queue if sms.phone == "+32444444444"]
         self.assertEquals(len(officer_sms), 1)
         self.assertIn("TESTCHFSMS", officer_sms[0].sms_message)
-        self.assertIn("Agilo", officer_sms[0].sms_message)
-        self.assertIn("Remorlogy", officer_sms[0].sms_message)
-        self.assertIn("Jambero", officer_sms[0].sms_message)
+        self.assertIn(family.location.name, officer_sms[0].sms_message)
+        self.assertIn(family.location.parent.name, officer_sms[0].sms_message)
+        self.assertIn(family.location.parent.parent.name, officer_sms[0].sms_message)
         self.assertIn("Test product VISIT", officer_sms[0].sms_message)
 
         # tearDown
@@ -541,7 +548,7 @@ class RenewalsTestCase(TestCase):
         insuree_newpic, family_newpic = create_test_insuree_for_policy(
             custom_props={"photo_date": datetime.datetime.now() - datetimedelta(days=30)})
         insuree_oldpic, family_oldpic = create_test_insuree_for_policy(
-            custom_props={"photo_date": "2010-01-01", "chf_id": "CHFMARK"})  # 5 years by default
+            custom_props={"photo_date": "2010-01-01", "chf_id": "CHFMARK", 'last_name':'Test Last'})  # 5 years by default
         product = create_test_product("VISIT")
         officer = create_test_officer(custom_props={"phone": "+32444444444", "phone_communication": True})
         photo_newpic = create_test_photo(insuree_newpic.id, officer.id)
