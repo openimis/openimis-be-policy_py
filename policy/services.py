@@ -319,7 +319,7 @@ class FilteredPoliciesService(object):
                 
         res.query.group_by = ['id']
         if not req.show_history:
-            res = res.filter(*core.filter_validity())
+            res = res.filter(*core.filter_validity(validity = req.target_date if req.target_date else None))
         if req.active_or_last_expired_only:
             # sort on status, so that any active policy (status = 2) pops up...
             res = res.annotate(not_null_expiry_date=Coalesce('expiry_date', py_date.max)) \
@@ -333,25 +333,17 @@ class ByInsureeService(FilteredPoliciesService):
         super(ByInsureeService, self).__init__(user)
 
     def request(self, by_insuree_request):
-        insurees = Insuree.objects.filter(
-            chf_id=by_insuree_request.chf_id,
-            *core.filter_validity() if not by_insuree_request.show_history else []
-        )
         res = self.build_query(by_insuree_request)
-        res = res.prefetch_related('insuree_policies')
-        res = res.filter(insuree_policies__insuree__in=insurees)
-        # .distinct('product__code') >> DISTINCT ON fields not supported by MS-SQL
-        if by_insuree_request.target_date:
-            res = get_queryset_valid_at_date(res, by_insuree_request.target_date)
+        res = res.filter(insuree_policies__insuree__chf_id=by_insuree_request.chf_id)
         if by_insuree_request.active_or_last_expired_only:
             products = {}
-            for r in res:
-                if r.product.code not in products.keys():
-                    products[r.product.code] = r
+            for policy in res:
+                if policy.status == Policy.STATUS_IDLE or policy.status == Policy.STATUS_READY:
+                    products['policy.product.code-%s' % policy.uuid] = policy
+                elif policy.product.code not in products.keys():
+                    products[policy.product.code] = policy
             res = products.values()
-        items = tuple(
-            map(lambda x: FilteredPoliciesService._to_item(x), res)
-        )
+        items = [FilteredPoliciesService._to_item(x) for x in res]
         # possible improvement: sort via the ORM
         # ... but beware of the active_or_last_expired_only filtering!
         order_attr = to_snake_case(by_insuree_request.order_by if by_insuree_request.order_by else "expiry_date")
@@ -395,9 +387,8 @@ class ByFamilyService(FilteredPoliciesService):
         super(ByFamilyService, self).__init__(user)
 
     def request(self, by_family_request):
-        family = Family.objects.get(uuid=by_family_request.family_uuid)
         res = self.build_query(by_family_request)
-        res = res.filter(family_id=family.id)
+        res = res.filter(family_uuid=by_family_request.family_uuid)
         # .distinct('product__code') >> DISTINCT ON fields not supported by MS-SQL
         if by_family_request.active_or_last_expired_only:
             products = {}
@@ -653,7 +644,7 @@ class NativeEligibilityService(object):
                                                    if min_date_qs["min_date_lte"]
                                                    else min_date_qs["min_date_all"])
 
-        if queryset_item_or_service.filter(min_date__lte=now).filter(left__isnull=True).first():
+        if queryset_item_or_service.filter(min_date__lte=now).filter(left__isnull=True).order_by('-validity_from').first():
             items_or_services_left = None
         else:
             items_or_services_left = queryset_item_or_service\
@@ -740,6 +731,7 @@ class NativeEligibilityService(object):
                                                   filter=get_total_filter(Service.CATEGORY_VISIT),
                                                   distinct=True), 0)) \
             .annotate(total_visits_left=F("policy__product__max_no_visits") - F("total_visits")) \
+            .order_by('-expiry_date')\
             .first()
 
         if result is None:
