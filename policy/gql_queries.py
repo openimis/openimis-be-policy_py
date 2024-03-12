@@ -2,7 +2,7 @@ import graphene
 from graphene_django import DjangoObjectType
 from django.utils.translation import gettext as _
 from .apps import PolicyConfig
-from .models import Policy
+from .models import Policy, PolicyRenewal
 from core import prefix_filterset, filter_validity, ExtendedConnection, ExtendedRelayConnection
 from core.schema import OfficerGQLType
 from product.schema import ProductGQLType
@@ -44,6 +44,13 @@ class PolicyGQLType(DjangoObjectType):
         }
         connection_class = ExtendedConnection
 
+class PolicyRenewalGQLType(DjangoObjectType):
+    class Meta:
+        model = PolicyRenewal
+        interfaces = (graphene.relay.Node,)
+        filter_fields = {
+        }
+        connection_class = ExtendedConnection
 
 class PolicyAndWarningsGQLType(graphene.ObjectType):
     policy = graphene.Field(PolicyGQLType)
