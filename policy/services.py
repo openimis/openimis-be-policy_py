@@ -361,11 +361,12 @@ class ByInsureeService(FilteredPoliciesService):
 @core.comparable
 class ByFamilyRequest(object):
 
-    def __init__(self, family_uuid, active_or_last_expired_only=False, show_history=False, order_by=None):
+    def __init__(self, family_uuid, active_or_last_expired_only=False, show_history=False, order_by=None, target_date=None):
         self.family_uuid = family_uuid
         self.active_or_last_expired_only = active_or_last_expired_only
         self.show_history = show_history
         self.order_by = order_by
+        self.target_date = target_date
 
     def __eq__(self, other):
         return isinstance(other, self.__class__) and self.__dict__ == other.__dict__
@@ -388,7 +389,7 @@ class ByFamilyService(FilteredPoliciesService):
 
     def request(self, by_family_request):
         res = self.build_query(by_family_request)
-        res = res.filter(family_uuid=by_family_request.family_uuid)
+        res = res.filter(family__uuid=by_family_request.family_uuid)
         # .distinct('product__code') >> DISTINCT ON fields not supported by MS-SQL
         if by_family_request.active_or_last_expired_only:
             products = {}

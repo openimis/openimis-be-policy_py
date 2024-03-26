@@ -137,6 +137,33 @@ class PolicyGraphQLTestCase(GraphQLTestCase):
 
         # This validates the status code and if you get errors
         self.assertResponseNoErrors(response)
+        
+    def test_family_query_with_variables(self):
+        response = self.query(
+            '''
+            query policiesByFamily($familyUuid: String!, $targetDate:  Date! ) {
+                policiesByFamily(orderBy: "expiryDate",activeOrLastExpiredOnly: true,familyUuid:$familyUuid ,targetDate: $targetDate,first: 5)
+                {
+                    totalCount
+                    pageInfo { hasNextPage, hasPreviousPage, startCursor, endCursor}
+                    edges
+                    {
+                        node
+                        {
+                            policyUuid,productCode,productName,officerCode,officerName,enrollDate,effectiveDate,startDate,expiryDate,status,policyValue,balance,ded,dedInPatient,dedOutPatient,ceiling,ceilingInPatient,ceilingOutPatient
+                        }
+                    }   
+                }
+            } 
+            ''',
+            headers={"HTTP_AUTHORIZATION": f"Bearer {self.admin_token}"},
+            variables={'familyUuid': str(self.insuree.family.uuid), 'targetDate':"2019-01-01"}
+        )
+
+        content = json.loads(response.content)
+
+        # This validates the status code and if you get errors
+        self.assertResponseNoErrors(response)
 
        
    
