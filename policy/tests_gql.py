@@ -1,0 +1,214 @@
+import base64
+import json
+from dataclasses import dataclass
+from core.utils import filter_validity
+from core.models import User
+from core.test_helpers import create_test_interactive_user
+from django.conf import settings
+from medical.models import Service 
+from graphene_django.utils.testing import GraphQLTestCase
+from graphql_jwt.shortcuts import get_token
+#credits https://docs.graphene-python.org/projects/django/en/latest/testing/
+from medical.test_helpers import (
+    create_test_item,
+    create_test_service
+)
+from insuree.test_helpers import create_test_insuree
+from policy.test_helpers import create_test_policy
+from contribution.test_helpers import create_test_premium
+from product.models import ProductItemOrService
+from product.test_helpers import (
+    create_test_product,
+    create_test_product_service,
+    create_test_product_item,
+)
+from location.test_helpers import (
+    create_test_health_facility,
+    create_test_village
+)
+
+@dataclass
+class DummyContext:
+    """ Just because we need a context to generate. """
+    user: User
+
+class PolicyGraphQLTestCase(GraphQLTestCase):
+    GRAPHQL_URL = f'/{settings.SITE_ROOT()}graphql'
+    # This is required by some version of graphene but is never used. It should be set to the schema but the import
+    # is shown as an error in the IDE, so leaving it as True.
+    GRAPHQL_SCHEMA = True
+    admin_user = None
+
+    @classmethod
+    def setUpClass(cls):
+        super().setUpClass()
+        cls.admin_user = create_test_interactive_user(username="testLocationAdmin")
+        cls.admin_token = get_token(cls.admin_user, DummyContext(user=cls.admin_user))
+        
+        cls.test_village  =create_test_village()
+        cls.test_ward =cls.test_village.parent
+        cls.test_region =cls.test_village.parent.parent.parent
+        cls.test_district = cls.test_village.parent.parent
+        # Given
+        cls.insuree = create_test_insuree(custom_props={'current_village':cls.test_village})
+        cls.service = create_test_service("A", custom_props={"name": "test_simple_batch"})
+        cls.item = create_test_item("A", custom_props={"name": "test_simple_batch"})
+
+        cls.product = create_test_product(
+            "BCUL0001",
+            custom_props={
+                "name": "simplebatch",
+                "lump_sum": 10_000,
+                "location_id": cls.test_region.id
+            },
+        )
+        
+        cls.product_service = create_test_product_service(
+            cls.product,
+            cls.service,
+            custom_props={},
+        )
+        cls.product_item = create_test_product_item(
+            cls.product,
+            cls.item,
+            custom_props={"price_origin": ProductItemOrService.ORIGIN_RELATIVE},
+        )
+        cls.policy = create_test_policy(cls.product, cls.insuree, link=True)
+        cls.premium = create_test_premium(
+            policy_id=cls.policy.id, custom_props={}
+        )
+  
+        
+    
+    def test_insuree_policy_query(self):
+        
+        response = self.query(
+            '''
+            query {
+                policies(first: 10,orderBy: ["-enrollDate"], balanceLte: 100)
+                {
+                    totalCount
+                    pageInfo { hasNextPage, hasPreviousPage, startCursor, endCursor}
+                    edges
+                    {
+                        node
+                        {
+                            uuid,product{id,code,name,location{id}},officer{id,uuid,code,lastName,otherNames},family{id,uuid,headInsuree{id chfId uuid lastName otherNames},location{id,uuid,code,name,type,parent{id,uuid,code,name,type,parent{id,uuid,code,name,type,parent{id,uuid,code,name,type}}}}},enrollDate,effectiveDate,startDate,expiryDate,stage,status,value,sumPremiums,validityFrom,validityTo
+                        }
+                    }
+                }
+            }
+            ''',
+            headers={"HTTP_AUTHORIZATION": f"Bearer {self.admin_token}"},
+        )
+
+        content = json.loads(response.content)
+
+        # This validates the status code and if you get errors
+        self.assertResponseNoErrors(response)
+
+        # Add some more asserts if you like
+        ...
+
+    def test_query_with_variables(self):
+        response = self.query(
+            '''
+    
+            query policiesByInsuree($chfid: String!, $targetDate:  Date! ) {
+                policiesByInsuree(chfId:$chfid ,targetDate: $targetDate)
+                {
+                    totalCount
+                    pageInfo { hasNextPage, hasPreviousPage, startCursor, endCursor}
+                    edges
+                    {
+                        node
+                        {
+                            policyUuid,productCode,productName,officerCode,officerName,enrollDate,effectiveDate,startDate,expiryDate,status,policyValue,balance,ded,dedInPatient,dedOutPatient,ceiling,ceilingInPatient,ceilingOutPatient
+                        }
+                    }
+                }
+            }
+            ''',
+            headers={"HTTP_AUTHORIZATION": f"Bearer {self.admin_token}"},
+            variables={'chfid': "070707070", 'targetDate':"2019-01-01"}
+        )
+
+        content = json.loads(response.content)
+
+        # This validates the status code and if you get errors
+        self.assertResponseNoErrors(response)
+        
+    def test_family_query_with_variables(self):
+        response = self.query(
+            '''
+            query policiesByFamily($familyUuid: String!, $targetDate:  Date! ) {
+                policiesByFamily(orderBy: "expiryDate",activeOrLastExpiredOnly: true,familyUuid:$familyUuid ,targetDate: $targetDate,first: 5)
+                {
+                    totalCount
+                    pageInfo { hasNextPage, hasPreviousPage, startCursor, endCursor}
+                    edges
+                    {
+                        node
+                        {
+                            policyUuid,productCode,productName,officerCode,officerName,enrollDate,effectiveDate,startDate,expiryDate,status,policyValue,balance,ded,dedInPatient,dedOutPatient,ceiling,ceilingInPatient,ceilingOutPatient
+                        }
+                    }   
+                }
+            } 
+            ''',
+            headers={"HTTP_AUTHORIZATION": f"Bearer {self.admin_token}"},
+            variables={'familyUuid': str(self.insuree.family.uuid), 'targetDate':"2019-01-01"}
+        )
+
+        content = json.loads(response.content)
+
+        # This validates the status code and if you get errors
+        self.assertResponseNoErrors(response)
+
+       
+   
+    def test_insuree_policy_query(self):
+        
+        
+        
+        
+        
+        response = self.query(
+            f'''
+{{
+  policyServiceEligibilityByInsuree(chfId:"{self.insuree.chf_id}", serviceCode:"{self.service.code}")
+  {{
+    minDateService, serviceLeft, isServiceOk
+  }}
+}}
+            ''',
+            headers={"HTTP_AUTHORIZATION": f"Bearer {self.admin_token}"},
+        )
+
+        content = json.loads(response.content)
+
+        # This validates the status code and if you get errors
+        self.assertResponseNoErrors(response)
+
+
+        # Add some more asserts if you like
+        response = self.query(
+            f'''
+{{
+  policyItemEligibilityByInsuree(chfId:"{self.insuree.chf_id}",itemCode:"{self.item.code}")
+  {{
+     minDateItem,itemLeft,isItemOk
+  }}
+}}
+            ''',
+            headers={"HTTP_AUTHORIZATION": f"Bearer {self.admin_token}"},
+        )
+
+        content = json.loads(response.content)
+
+        # This validates the status code and if you get errors
+        self.assertResponseNoErrors(response)
+
+        # Add some more asserts if you like
+        ...
+
