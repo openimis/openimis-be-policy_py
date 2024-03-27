@@ -14,7 +14,7 @@ from medical.test_helpers import (
     create_test_service
 )
 from insuree.test_helpers import create_test_insuree
-from policy.test_helpers import create_test_policy
+from policy.test_helpers import create_test_policy, dts
 from contribution.test_helpers import create_test_premium
 from product.models import ProductItemOrService
 from product.test_helpers import (
@@ -26,7 +26,7 @@ from location.test_helpers import (
     create_test_health_facility,
     create_test_village
 )
-
+from uuid import UUID
 @dataclass
 class DummyContext:
     """ Just because we need a context to generate. """
@@ -51,9 +51,10 @@ class PolicyGraphQLTestCase(GraphQLTestCase):
         cls.test_district = cls.test_village.parent.parent
         # Given
         cls.insuree = create_test_insuree(custom_props={'current_village':cls.test_village})
+        
         cls.service = create_test_service("A", custom_props={"name": "test_simple_batch"})
         cls.item = create_test_item("A", custom_props={"name": "test_simple_batch"})
-
+        
         cls.product = create_test_product(
             "BCUL0001",
             custom_props={
@@ -77,9 +78,20 @@ class PolicyGraphQLTestCase(GraphQLTestCase):
         cls.premium = create_test_premium(
             policy_id=cls.policy.id, custom_props={}
         )
-  
-        
-    
+        cls.policy_past = create_test_policy(cls.product, cls.insuree, link=True, custom_props={
+            "enroll_date": dts("2010-01-01"),
+            "start_date": dts("2010-01-01"),
+            "validity_from": dts("2010-01-01"),
+            "effective_date": dts("2010-01-01"),
+            "expiry_date": dts("2011-01-01"),
+            })
+        cls.premium_past = create_test_premium(
+            policy_id=cls.policy_past.id, custom_props={'pay_date':dts('2010-01-01')}
+        )
+        cls.not_insuree = create_test_insuree(with_family= False, custom_props={'family':cls.insuree.family})
+
+            
+            
     def test_insuree_policy_query(self):
         
         response = self.query(
@@ -109,8 +121,95 @@ class PolicyGraphQLTestCase(GraphQLTestCase):
 
         # Add some more asserts if you like
         ...
+    def test_query_not_insured_family_member(self):
+        response = self.query(
+            '''
+    
+            query policiesByInsuree($chfid: String!) {
+                policiesByInsuree(chfId:$chfid)
+                {
+                    totalCount
+                    pageInfo { hasNextPage, hasPreviousPage, startCursor, endCursor}
+                    edges
+                    {
+                        node
+                        {
+                            policyUuid,productCode,productName,officerCode,officerName,enrollDate,effectiveDate,startDate,expiryDate,status,policyValue,balance,ded,dedInPatient,dedOutPatient,ceiling,ceilingInPatient,ceilingOutPatient
+                        }
+                    }
+                }
+            }
+            ''',
+            headers={"HTTP_AUTHORIZATION": f"Bearer {self.admin_token}"},
+            variables={'chfid': self.not_insuree.chf_id, 'targetDate':self.policy.effective_date.strftime("%Y-%m-%d")}
+        )
+
+        content = json.loads(response.content)
+
+        # This validates the status code and if you get errors
+        self.assertResponseNoErrors(response)
+        self.assertEqual(content['data']['policiesByInsuree']['totalCount'], 0)
 
     def test_query_with_variables(self):
+        response = self.query(
+            '''
+    
+            query policiesByInsuree($chfid: String!) {
+                policiesByInsuree(chfId:$chfid)
+                {
+                    totalCount
+                    pageInfo { hasNextPage, hasPreviousPage, startCursor, endCursor}
+                    edges
+                    {
+                        node
+                        {
+                            policyUuid,productCode,productName,officerCode,officerName,enrollDate,effectiveDate,startDate,expiryDate,status,policyValue,balance,ded,dedInPatient,dedOutPatient,ceiling,ceilingInPatient,ceilingOutPatient
+                        }
+                    }
+                }
+            }
+            ''',
+            headers={"HTTP_AUTHORIZATION": f"Bearer {self.admin_token}"},
+            variables={'chfid': self.insuree.chf_id, 'targetDate':self.policy.effective_date.strftime("%Y-%m-%d")}
+        )
+
+        content = json.loads(response.content)
+
+        # This validates the status code and if you get errors
+        self.assertResponseNoErrors(response)
+        self.assertEqual(content['data']['policiesByInsuree']['totalCount'], 2)
+        
+    def test_query_with_variables_2(self):
+        response = self.query(
+            '''
+    
+            query policiesByInsuree($chfid: String!, $activeOrLastExpiredOnly: Boolean!) {
+                policiesByInsuree(chfId:$chfid, activeOrLastExpiredOnly:$activeOrLastExpiredOnly)
+                {
+                    totalCount
+                    pageInfo { hasNextPage, hasPreviousPage, startCursor, endCursor}
+                    edges
+                    {
+                        node
+                        {
+                            policyUuid,productCode,productName,officerCode,officerName,enrollDate,effectiveDate,startDate,expiryDate,status,policyValue,balance,ded,dedInPatient,dedOutPatient,ceiling,ceilingInPatient,ceilingOutPatient
+                        }
+                    }
+                }
+            }
+            ''',
+            headers={"HTTP_AUTHORIZATION": f"Bearer {self.admin_token}"},
+            variables={'chfid': self.insuree.chf_id, 'activeOrLastExpiredOnly':True}
+        )
+
+        content = json.loads(response.content)
+
+        # This validates the status code and if you get errors
+        self.assertResponseNoErrors(response)
+        self.assertEqual(content['data']['policiesByInsuree']['totalCount'], 1)
+        self.assertEqual(UUID(content['data']['policiesByInsuree']['edges'][0]['node']['policyUuid']), UUID(self.policy.uuid))
+                
+    def test_query_with_variables_3(self):
         response = self.query(
             '''
     
@@ -130,13 +229,15 @@ class PolicyGraphQLTestCase(GraphQLTestCase):
             }
             ''',
             headers={"HTTP_AUTHORIZATION": f"Bearer {self.admin_token}"},
-            variables={'chfid': "070707070", 'targetDate':"2019-01-01"}
+            variables={'chfid': self.insuree.chf_id, 'targetDate':self.policy.effective_date.strftime("%Y-%m-%d")}
         )
 
         content = json.loads(response.content)
 
         # This validates the status code and if you get errors
         self.assertResponseNoErrors(response)
+        self.assertEqual(content['data']['policiesByInsuree']['totalCount'], 1)
+        self.assertEqual(UUID(content['data']['policiesByInsuree']['edges'][0]['node']['policyUuid']), UUID(self.policy.uuid))
         
     def test_family_query_with_variables(self):
         response = self.query(
@@ -157,13 +258,17 @@ class PolicyGraphQLTestCase(GraphQLTestCase):
             } 
             ''',
             headers={"HTTP_AUTHORIZATION": f"Bearer {self.admin_token}"},
-            variables={'familyUuid': str(self.insuree.family.uuid), 'targetDate':"2019-01-01"}
+            variables={'familyUuid': str(self.insuree.family.uuid), 'targetDate':self.policy.effective_date.strftime("%Y-%m-%d")}
         )
 
         content = json.loads(response.content)
+        
+        
 
         # This validates the status code and if you get errors
         self.assertResponseNoErrors(response)
+        self.assertEqual(content['data']['policiesByFamily']['totalCount'], 1)
+        self.assertEqual(UUID(content['data']['policiesByFamily']['edges'][0]['node']['policyUuid']), UUID(self.policy.uuid))
 
        
    
