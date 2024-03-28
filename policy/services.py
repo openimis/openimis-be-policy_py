@@ -316,10 +316,14 @@ class FilteredPoliciesService(object):
             .annotate(total_rem_delivery=Sum('claim_ded_rems__rem_delivery')) \
             .annotate(total_rem_hospitalization=Sum('claim_ded_rems__rem_hospitalization')) \
             .annotate(total_rem_antenatal=Sum('claim_ded_rems__rem_antenatal'))
-                
         res.query.group_by = ['id']
+        if hasattr(req, 'chf_id'):
+            res= res.filter(insuree_policies__insuree__chf_id = req.chf_id)
         if not req.show_history:
-            res = res.filter(*core.filter_validity(validity = req.target_date if req.target_date else None))
+            if req.target_date: 
+                res = res.filter(*core.filter_validity(), expiry_date__gt = req.target_date, effective_date__lte = req.target_date)
+            else:
+                res = res.filter(*core.filter_validity())
         if req.active_or_last_expired_only:
             # sort on status, so that any active policy (status = 2) pops up...
             res = res.annotate(not_null_expiry_date=Coalesce('expiry_date', py_date.max)) \
@@ -361,11 +365,12 @@ class ByInsureeService(FilteredPoliciesService):
 @core.comparable
 class ByFamilyRequest(object):
 
-    def __init__(self, family_uuid, active_or_last_expired_only=False, show_history=False, order_by=None):
+    def __init__(self, family_uuid, active_or_last_expired_only=False, show_history=False, order_by=None, target_date=None):
         self.family_uuid = family_uuid
         self.active_or_last_expired_only = active_or_last_expired_only
         self.show_history = show_history
         self.order_by = order_by
+        self.target_date = target_date
 
     def __eq__(self, other):
         return isinstance(other, self.__class__) and self.__dict__ == other.__dict__
@@ -388,7 +393,7 @@ class ByFamilyService(FilteredPoliciesService):
 
     def request(self, by_family_request):
         res = self.build_query(by_family_request)
-        res = res.filter(family_uuid=by_family_request.family_uuid)
+        res = res.filter(family__uuid=by_family_request.family_uuid)
         # .distinct('product__code') >> DISTINCT ON fields not supported by MS-SQL
         if by_family_request.active_or_last_expired_only:
             products = {}
