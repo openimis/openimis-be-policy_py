@@ -3,7 +3,9 @@ import json
 from dataclasses import dataclass
 from core.utils import filter_validity
 from core.models import User
-from core.test_helpers import create_test_interactive_user, AssertMutation
+from core.test_helpers import create_test_interactive_user
+from core.models.openimis_graphql_test_case import openIMISGraphQLTestCase
+
 from django.conf import settings
 from medical.models import Service 
 from graphene_django.utils.testing import GraphQLTestCase
@@ -32,11 +34,8 @@ class DummyContext:
     """ Just because we need a context to generate. """
     user: User
 
-class PolicyGraphQLTestCase(GraphQLTestCase):
-    GRAPHQL_URL = f'/{settings.SITE_ROOT()}graphql'
-    # This is required by some version of graphene but is never used. It should be set to the schema but the import
-    # is shown as an error in the IDE, so leaving it as True.
-    GRAPHQL_SCHEMA = True
+class PolicyGraphQLTestCase(openIMISGraphQLTestCase):
+
     admin_user = None
   
     @classmethod
@@ -344,5 +343,5 @@ class PolicyGraphQLTestCase(GraphQLTestCase):
             headers={"HTTP_AUTHORIZATION": f"Bearer {self.admin_token}"},
             variables={'chfid': self.insuree.chf_id, 'activeOrLastExpiredOnly':True}
         )
-        content = AssertMutation(self,muuid,self.admin_token)
+        content = self.get_mutation_result(muuid,self.admin_token)
         
