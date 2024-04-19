@@ -813,6 +813,10 @@ class NativeEligibilityService(object):
         return eligibility
 
 
+# Used for renewals below
+FakeUser = lambda **kwargs: type("Object", (), kwargs)
+
+
 def insert_renewals(date_from=None, date_to=None, officer_id=None, reminding_interval=None, location_id=None, location_levels=4):
     logger.info("Insert renewals: start")
     if reminding_interval is None:
@@ -888,30 +892,39 @@ def insert_renewals(date_from=None, date_to=None, officer_id=None, reminding_int
             .filter(start_date__gte=renewal_date) # Add validity to check
         if not following_policies.first():
             logger.info(f"Insert renewals: checks done, there should be a renewal for policy {policy.id}-{policy.uuid}")
-            policy_renewal, policy_renewal_created = PolicyRenewal.objects.get_or_create(
-                policy=policy,
-                validity_to=None,
-                defaults=dict(
+            renewals = PolicyRenewal.objects.filter(policy=policy, validity_to=None).order_by("id")
+            if not renewals:
+                policy_renewal = PolicyRenewal.objects.create(
+                    policy=policy,
+                    validity_to=None,
                     renewal_prompt_date=now,
                     renewal_date=renewal_date,
                     new_officer=officer,
-                    phone_number=officer.phone,
+                    phone_number=officer.phone if officer else None,
                     sms_status=0,
                     insuree=policy.family.head_insuree,
-                    policy=policy,
                     new_product=product,
                     renewal_warnings=renewal_warning,
                     validity_from=now,
                     audit_user_id=0,
                 )
-            )
-            if policy_renewal_created:
-                logger.info(f"Insert renewals: creating renewal for policy {policy.id}-{policy.uuid}")
+                logger.info(f"Insert renewals: creating renewal for policy {policy.id} - {policy.uuid}")
                 create_insuree_renewal_detail(policy_renewal)  # The insuree module can create additional renewal data
             else:
-                logger.info(f"Insert renewals: renewal for policy {policy.id}-{policy.uuid} already exists - {policy_renewal.uuid}")
+                # Since we're using django-apscheduler without a way to prevent concurrency, there might be several renewals for the same policy
+                # We're going to take this opportunity to clean up extra renewals
+                logger.info(f"Insert renewals: renewal for policy {policy.id} - {policy.uuid} already exists - at least 1")
+                total = 0
+                for renewal in renewals:
+                    total += 1
+                    if total == 1:
+                        continue
+                    logger.info(f"Insert renewals: deleting extra renewal ({renewal.uuid}) for policy {policy.id} - {policy.uuid}")
+                    # Faking a user, since this is triggered by an automated task and we don't have any
+                    user = FakeUser(id_for_audit='-1')
+                    PolicyRenewalService(user).delete(renewal)
         else:
-            logger.info(f"Insert renewals: checks done, no renewal for policy {policy.id}-{policy.uuid}")
+            logger.info(f"Insert renewals: checks done, no renewal for policy {policy.id} - {policy.uuid}")
 
 
 def update_renewals():
