@@ -13,7 +13,7 @@ from insuree.test_helpers import create_test_insuree
 from policy.test_helpers import create_test_policy2, create_test_insuree_for_policy
 from product.test_helpers import create_test_product, create_test_product_service, create_test_product_item
 from location.test_helpers import create_test_health_facility
-from .services import *
+from policy.services import *
 from medical_pricelist.test_helpers import (
     create_test_item_pricelist,
     create_test_service_pricelist
