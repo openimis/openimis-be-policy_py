@@ -1,38 +1,28 @@
-import base64
 import json
 from dataclasses import dataclass
-from core.utils import filter_validity
-from core.models import User
-from core.test_helpers import create_test_interactive_user
-from core.models.openimis_graphql_test_case import openIMISGraphQLTestCase
-
-from django.conf import settings
-from medical.models import Service 
-from graphene_django.utils.testing import GraphQLTestCase
-from graphql_jwt.shortcuts import get_token
-#credits https://docs.graphene-python.org/projects/django/en/latest/testing/
-from medical.test_helpers import (
-    create_test_item,
-    create_test_service
-)
-from insuree.test_helpers import create_test_insuree
-from policy.test_helpers import create_test_policy, dts
-from contribution.test_helpers import create_test_premium
-from product.models import ProductItemOrService
-from product.test_helpers import (
-    create_test_product,
-    create_test_product_service,
-    create_test_product_item,
-)
-from location.test_helpers import (
-    create_test_health_facility,
-    create_test_village
-)
 from uuid import UUID
+
+from contribution.test_helpers import create_test_premium
+from core.models import User
+from core.models.openimis_graphql_test_case import openIMISGraphQLTestCase
+from core.test_helpers import create_test_interactive_user
+from graphql_jwt.shortcuts import get_token
+from insuree.test_helpers import create_test_insuree
+from location.test_helpers import create_test_village
+#credits https://docs.graphene-python.org/projects/django/en/latest/testing/
+from medical.test_helpers import create_test_item, create_test_service
+from policy.test_helpers import create_test_policy, dts
+from product.models import ProductItemOrService
+from product.test_helpers import (create_test_product,
+                                  create_test_product_item,
+                                  create_test_product_service)
+
+
 @dataclass
 class DummyContext:
     """ Just because we need a context to generate. """
     user: User
+
 
 class PolicyGraphQLTestCase(openIMISGraphQLTestCase):
 
@@ -44,9 +34,9 @@ class PolicyGraphQLTestCase(openIMISGraphQLTestCase):
         cls.admin_user = create_test_interactive_user(username="testLocationAdmin")
         cls.admin_token = get_token(cls.admin_user, DummyContext(user=cls.admin_user))
         
-        cls.test_village  =create_test_village()
-        cls.test_ward =cls.test_village.parent
-        cls.test_region =cls.test_village.parent.parent.parent
+        cls.test_village =create_test_village()
+        cls.test_ward=cls.test_village.parent
+        cls.test_region=cls.test_village.parent.parent.parent
         cls.test_district = cls.test_village.parent.parent
         # Given
         cls.insuree = create_test_insuree(custom_props={'current_village':cls.test_village})
