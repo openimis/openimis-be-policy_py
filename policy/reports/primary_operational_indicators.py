@@ -6,6 +6,7 @@ from django.db import connection
 
 from tools.utils import dictfetchall
 import logging
+
 logger = logging.getLogger(__name__)
 
 # If manually pasting from ReportBro and you have test data, search and replace \" with \\"
@@ -4177,125 +4178,114 @@ template = """{
 
 # the udfAvailablePremium function was written before GREATEST() was available in MS SQL and
 # availablePremium could be simplified to:
-available_premium_expression = """
+date_add_fct = "DATEADD(d," if connection.vendor == 'microsoft' else "DATEADD_DAY("
+date_diff_fct = "DATEDIFF(d," if connection.vendor == 'microsoft' else "DATEDIFF_DAY("
+day_fct = "DAY(" if connection.vendor == 'microsoft' else "extract (DAY FROM "
+max_fct = "MAX"
+available_premium_expression = f"""
 CASE
-WHEN MONTH(DATEADD_DAY(-1,PL."ExpiryDate")) = MONTH(%(LastDay)s) AND YEAR(DATEADD_DAY(-1,PL."ExpiryDate")) = YEAR(%(LastDay)s) AND extract(DAY from (PL."ExpiryDate")) > 1
-    THEN GREATEST(1, DATEDIFF_DAY(GREATEST(PR."PayDate", %(LastDay)s),PL."ExpiryDate"))
+WHEN MONTH({date_add_fct}-1,PL."ExpiryDate")) = MONTH(%(LastDay)s) AND YEAR({date_add_fct}-1,PL."ExpiryDate")) = YEAR(%(LastDay)s) AND {day_fct}(PL."ExpiryDate")) > 1
+    THEN GREATEST(1, {date_diff_fct}GREATEST(PR."PayDate", %(LastDay)s),PL."ExpiryDate"))
       * ((PR."Amount")
-         /GREATEST(1, DATEDIFF_DAY(GREATEST(PR."PayDate", PL."EffectiveDate"),PL."ExpiryDate")))
+         /GREATEST(1, {date_diff_fct}GREATEST(PR."PayDate", PL."EffectiveDate"),PL."ExpiryDate")))
 WHEN MONTH(GREATEST(PR."PayDate", PL."EffectiveDate")) = MONTH(%(LastDay)s) AND YEAR(GREATEST(PR."PayDate", PL."EffectiveDate")) = YEAR(%(LastDay)s)
-    THEN ((%(DaysInMonth)s + 1 - extract (DAY FROM GREATEST(PR."PayDate", PL."EffectiveDate")))
+    THEN ((%(DaysInMonth)s + 1 - {day_fct}GREATEST(PR."PayDate", PL."EffectiveDate")))
               * (PR."Amount"
-                     /GREATEST(1, DATEDIFF_DAY(GREATEST(PR."PayDate", PL."EffectiveDate"),PL."ExpiryDate"))))
+                     /GREATEST(1, {date_diff_fct}GREATEST(PR."PayDate", PL."EffectiveDate"),PL."ExpiryDate"))))
 WHEN PL."EffectiveDate" < %(LastDay)s AND PL."ExpiryDate" > %(LastDay)s AND PR."PayDate" < %(LastDay)s
     THEN %(DaysInMonth)s
              * (PR."Amount"
-                    /GREATEST(1, DATEDIFF_DAY(GREATEST(PR."PayDate", PL."EffectiveDate"),DATEADD_DAY(-1,PL."ExpiryDate"))))
+                    /GREATEST(1, {date_diff_fct}GREATEST(PR."PayDate", PL."EffectiveDate"),{date_add_fct}-1,PL."ExpiryDate"))))
 END
 """
 
 policies_primary_indicators_sql = f"""
     SELECT prod."ProdID" as "ProdID", prod."ProductCode" as "ProductCode",
-        COUNT(ins."InsureeID") FILTER (
-            WHERE Ins."Gender" = 'M'     
+        COUNT(CASE  WHEN ins."Gender" = 'M'     
             AND pl."PolicyStatus" > 1
             AND pl."EffectiveDate" <= %(LastDay)s
             AND pl."ExpiryDate" > %(LastDay)s
-        ) AS "TotalMaleInsurees",
-        COUNT(ins."InsureeID") FILTER (
-            WHERE Ins."Gender" = 'F'     
+        THEN 1 END) AS "TotalMaleInsurees",
+        COUNT(CASE  WHEN ins."Gender" = 'F'     
             AND pl."PolicyStatus" > 1
             AND pl."EffectiveDate" <= %(LastDay)s
             AND pl."ExpiryDate" > %(LastDay)s
-        ) AS "TotalFemaleInsurees",
-        COUNT(ins."InsureeID") FILTER (
-            WHERE Ins."Gender" = 'O'     
+        THEN 1 END) AS "TotalFemaleInsurees",
+        COUNT(CASE  WHEN ins."Gender" = 'O'     
             AND pl."PolicyStatus" > 1
             AND pl."EffectiveDate" <= %(LastDay)s
             AND pl."ExpiryDate" > %(LastDay)s
-        ) AS "TotalOtherInsurees",
-        COUNT(ins."InsureeID") FILTER (
-            WHERE Ins."Gender" = 'M'     
+        THEN 1 END) AS "TotalOtherInsurees",
+        COUNT(CASE  WHEN ins."Gender" = 'M'     
             AND pl."PolicyStatus" > 1
             AND pl."PolicyStage" = 'N'
             AND YEAR(pl."EffectiveDate") = YEAR(%(LastDay)s)
             AND MONTH(pl."EffectiveDate") = MONTH(%(LastDay)s)
-        ) AS "NewMaleInsurees",
-        COUNT(ins."InsureeID") FILTER (
-            WHERE Ins."Gender" = 'F'     
+        THEN 1 END) AS "NewMaleInsurees",
+        COUNT(CASE  WHEN ins."Gender" = 'F'     
             AND pl."PolicyStatus" > 1
             AND pl."PolicyStage" = 'N'
             AND YEAR(pl."EffectiveDate") = YEAR(%(LastDay)s)
             AND MONTH(pl."EffectiveDate") = MONTH(%(LastDay)s)
-        ) AS "NewFemaleInsurees",
-        COUNT(ins."InsureeID") FILTER (
-            WHERE Ins."Gender" = 'O'     
+        THEN 1 END) AS "NewFemaleInsurees",
+        COUNT(CASE  WHEN ins."Gender" = 'O'     
             AND pl."PolicyStatus" > 1
             AND pl."PolicyStage" = 'N'
             AND YEAR(pl."EffectiveDate") = YEAR(%(LastDay)s)
             AND MONTH(pl."EffectiveDate") = MONTH(%(LastDay)s)
-        ) AS "NewOtherInsurees",
-        COUNT(ins."InsureeID") FILTER (
-            WHERE Ins."Gender" = 'M'     
+        THEN 1 END) AS "NewOtherInsurees",
+        COUNT(CASE  WHEN ins."Gender" = 'M'     
             AND pl."PolicyStatus" > 1
             AND pl."PolicyStage" = 'R'
             AND YEAR(pl."EnrollDate") = YEAR(%(LastDay)s)
             AND MONTH(pl."EnrollDate") = MONTH(%(LastDay)s)
-        ) AS "RenewMaleInsurees",
-        COUNT(ins."InsureeID") FILTER (
-            WHERE Ins."Gender" = 'F'     
+        THEN 1 END) AS "RenewMaleInsurees",
+        COUNT(CASE  WHEN ins."Gender" = 'F'     
             AND pl."PolicyStatus" > 1
             AND pl."PolicyStage" = 'R'
             AND YEAR(pl."EnrollDate") = YEAR(%(LastDay)s)
             AND MONTH(pl."EnrollDate") = MONTH(%(LastDay)s)
-        ) AS "RenewFemaleInsurees",
-        COUNT(ins."InsureeID") FILTER (
-            WHERE Ins."Gender" = 'O'     
+        THEN 1 END) AS "RenewFemaleInsurees",
+        COUNT(CASE  WHEN ins."Gender" = 'O'     
             AND pl."PolicyStatus" > 1
             AND pl."PolicyStage" = 'R'
             AND YEAR(pl."EnrollDate") = YEAR(%(LastDay)s)
             AND MONTH(pl."EnrollDate") = MONTH(%(LastDay)s)
-        ) AS "RenewOtherInsurees",
-        COUNT(ins."InsureeID") FILTER (
-            WHERE Ins."Gender" = 'M'     
+        THEN 1 END) AS "RenewOtherInsurees",
+        COUNT(CASE  WHEN ins."Gender" = 'M'     
             AND pl."PolicyStatus" = 4
             AND YEAR(pl."ValidityFrom") = YEAR(%(LastDay)s)
             AND MONTH(pl."ValidityFrom") = MONTH(%(LastDay)s)
-        ) AS "SuspendedMaleInsurees",
-        COUNT(ins."InsureeID") FILTER (
-            WHERE Ins."Gender" = 'F'     
+        THEN 1 END) AS "SuspendedMaleInsurees",
+        COUNT(CASE  WHEN ins."Gender" = 'F'     
             AND pl."PolicyStatus" = 4
             AND YEAR(pl."ValidityFrom") = YEAR(%(LastDay)s)
             AND MONTH(pl."ValidityFrom") = MONTH(%(LastDay)s)
-        ) AS "SuspendedFemaleInsurees",
-        COUNT(ins."InsureeID") FILTER (
-            WHERE Ins."Gender" = 'O'     
+        THEN 1 END) AS "SuspendedFemaleInsurees",
+        COUNT(CASE  WHEN ins."Gender" = 'O'     
             AND pl."PolicyStatus" = 4
             AND YEAR(pl."ValidityFrom") = YEAR(%(LastDay)s)
             AND MONTH(pl."ValidityFrom") = MONTH(%(LastDay)s)
-        ) AS "SuspendedOtherInsurees",
-        COUNT(ins."InsureeID") FILTER (
-            WHERE Ins."Gender" = 'M'     
+        THEN 1 END) AS "SuspendedOtherInsurees",
+        COUNT(CASE  WHEN ins."Gender" = 'M'     
             AND pl."PolicyStatus" > 1
             AND YEAR(pl."ExpiryDate") = YEAR(%(LastDay)s)
             AND MONTH(pl."ExpiryDate") = MONTH(%(LastDay)s)
-        ) AS "ExpiredMaleInsurees",
-        COUNT(ins."InsureeID") FILTER (
-            WHERE Ins."Gender" = 'F'     
+        THEN 1 END) AS "ExpiredMaleInsurees",
+        COUNT(CASE  WHEN ins."Gender" = 'F'     
             AND pl."PolicyStatus" > 1
             AND YEAR(pl."ExpiryDate") = YEAR(%(LastDay)s)
             AND MONTH(pl."ExpiryDate") = MONTH(%(LastDay)s)
-        ) AS "ExpiredFemaleInsurees",
-        COUNT(ins."InsureeID") FILTER (
-            WHERE Ins."Gender" = 'O'     
+        THEN 1 END) AS "ExpiredFemaleInsurees",
+        COUNT(CASE  WHEN ins."Gender" = 'O'     
             AND pl."PolicyStatus" > 1
             AND YEAR(pl."ExpiryDate") = YEAR(%(LastDay)s)
             AND MONTH(pl."ExpiryDate") = MONTH(%(LastDay)s)
-        ) AS "ExpiredOtherInsurees",
-        sum(pr."Amount") FILTER (
-            WHERE YEAR(pr."PayDate") = YEAR(%(LastDay)s)
+        THEN 1 END) AS "ExpiredOtherInsurees",
+        sum(CASE WHEN
+             YEAR(pr."PayDate") = YEAR(%(LastDay)s)
             AND MONTH(pr."PayDate") = MONTH(%(LastDay)s)
-        ) AS "TotalPremiumPaid",
+        THEN pr."Amount" END) AS "TotalPremiumPaid",
         SUM({available_premium_expression}) AS "AvailablePremium"
     FROM "tblPolicy" pl
     INNER JOIN "tblProduct" prod ON prod."ProdID" = pl."ProdID"
@@ -4312,33 +4302,46 @@ policies_primary_indicators_sql = f"""
     AND ins."ValidityTo" IS NULL
     and pr."ValidityTo" IS NULL
     AND (prod."ProdID" = %(ProdId)s OR %(ProdId)s = 0)
-    AND (r."LocationId" = %(LocationId)s OR d."LocationId" = %(LocationId)s OR COALESCE(%(LocationId)s, 0) = 0 OR %(LocationId)s = 0)
+    AND (r."LocationId" = %(LocationId)s OR d."LocationId" = %(LocationId)s OR %(LocationId)s = 0 )
     GROUP BY prod."ProdID", prod."ProductCode";
 """
 
 
-def policies_primary_indicators_query(user, yearMonth, locationId=0, prodId=0, **kwargs):
+def policies_primary_indicators_query(
+    user, yearMonth, locationId=0, prodId=0, **kwargs
+):
     first_day = datetime.strptime(yearMonth, "%Y-%m-%d").replace(day=1)
     last_day = first_day + relativedelta(months=1) - timedelta(days=1)
     days_in_month = last_day.day
-
+    params = {
+        "LastDay": ("'" + last_day.strftime("%Y-%m-%d") + "'"),
+        "LocationId": locationId or 0,
+        "ProdId": prodId,
+        "DaysInMonth": days_in_month,
+    }
     with connection.cursor() as cur:
         try:
             cur.execute(
-                policies_primary_indicators_sql,
-                {
-                    "LastDay": last_day,
-                    "LocationId": locationId,
-                    "ProdId": prodId,
-                    "DaysInMonth": days_in_month,
-                },
+                *manage_named_parameters(policies_primary_indicators_sql, params),
             )
-            return {
-                "data": dictfetchall(cur)
-            }
+            return {"data": dictfetchall(cur)}
         except Exception as e:
             logger.exception("Error fetching policies primary indicators query")
             raise e
 
     logger.error("Policies primary indicators query arrived at end of function")
     return {"data": None}
+
+
+def manage_named_parameters(sql, params):
+    if connection.vendor == 'microsoft' and isinstance(params, dict):
+        import re
+
+        params = [
+            params[p]
+            for p in re.findall(r"%\(([\w]+)\)", policies_primary_indicators_sql)
+        ]
+        sql = re.sub(r"%\(([\w]+)\)", "%", sql)
+        return sql, params
+    else:
+        return sql, params
