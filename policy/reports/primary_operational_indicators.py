@@ -4301,7 +4301,10 @@ policies_primary_indicators_sql = f"""
     INNER JOIN "tblProduct" prod ON prod."ProdID" = pl."ProdID"
     INNER JOIN "tblFamilies" fam ON fam."FamilyID" = pl."FamilyID"
     INNER JOIN "tblInsuree" ins ON ins."InsureeID" = fam."InsureeID"
-    INNER JOIN "uvwLocations" l ON l."VillageId" = fam."LocationId"
+    INNER JOIN "tblLocations" v ON v."LocationId" = fam."LocationId"
+    INNER JOIN "tblLocations" w ON w."LocationId" = v."ParentLocationId"
+    INNER JOIN "tblLocations" d ON d."LocationId" = w."ParentLocationId"
+    INNER JOIN "tblLocations" r ON r."LocationId" = d."ParentLocationId"
     LEFT JOIN "tblPremium" pr ON pr."PolicyID" = pl."PolicyID"
     WHERE pl."ValidityTo" IS NULL
     AND prod."ValidityTo" IS NULL
@@ -4309,7 +4312,7 @@ policies_primary_indicators_sql = f"""
     AND ins."ValidityTo" IS NULL
     and pr."ValidityTo" IS NULL
     AND (prod."ProdID" = %(ProdId)s OR %(ProdId)s = 0)
-    AND (l."RegionId" = %(LocationId)s OR l."DistrictId" = %(LocationId)s OR COALESCE(%(LocationId)s, 0) = 0 OR %(LocationId)s = 0)
+    AND (r."LocationId" = %(LocationId)s OR d."LocationId" = %(LocationId)s OR COALESCE(%(LocationId)s, 0) = 0 OR %(LocationId)s = 0)
     GROUP BY prod."ProdID", prod."ProductCode";
 """
 

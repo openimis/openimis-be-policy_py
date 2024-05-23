@@ -41,7 +41,9 @@ class PolicyService:
         self.user = user
 
     @register_service_signal('policy_service.create_or_update')
-    def update_or_create(self, data, user):
+    def update_or_create(self, data, user): 
+        if isinstance(data['enroll_date'], str):
+            data['enroll_date'] = py_datetime.strptime(data['enroll_date'], "%Y-%m-%d").date()
         policy_uuid = data.get('uuid', None)
         if 'enroll_date' in data and data['enroll_date'] > py_date.today():
             raise ValidationError("policy.enroll_date_in_the_future")
