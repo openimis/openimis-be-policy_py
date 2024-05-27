@@ -198,8 +198,8 @@ def set_value(policy, family, prev_policy, user):
     # policy.value = Decimal(contributions + general_assembly + registration)
     discount(policy, prev_policy)
     instance = ContributionPlanBundleDetails.objects.filter(
-        contribution_plan_bundle__id=str(
-            "d2bb4dcc-d464-4496-8164-71a425da600e"
+        contribution_plan_bundle__name=str(
+            "Contribution paamg"
         )
     )
     if not instance:
