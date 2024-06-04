@@ -20,7 +20,8 @@ class Policy(core_models.VersionedModel):
     status = models.SmallIntegerField(db_column='PolicyStatus', blank=True, null=True)
     value = models.DecimalField(db_column='PolicyValue', max_digits=18, decimal_places=2, blank=True, null=True)
 
-    family = models.ForeignKey(Family, models.DO_NOTHING, db_column='FamilyID', related_name="policies")
+    family = models.ForeignKey(Family, on_delete=models.DO_NOTHING,
+                               related_name='policies', db_column='FamilyID', blank=True, null=True)
     enroll_date = fields.DateField(db_column='EnrollDate')
     start_date = fields.DateField(db_column='StartDate')
     effective_date = fields.DateField(db_column='EffectiveDate', blank=True, null=True)
@@ -37,14 +38,14 @@ class Policy(core_models.VersionedModel):
     @staticmethod
     def get_query_sum_premium(photo=False):
         return models.Sum(
-            'premiums__amount', 
-            filter=models.Q(*filter_validity(prefix='premiums__'),premiums__is_photo_fee=photo)
-            )
-    
-    def sum_premiums(self, photo = False):
+            'premiums__amount',
+            filter=models.Q(*filter_validity(prefix='premiums__'), premiums__is_photo_fee=photo)
+        )
+
+    def sum_premiums(self, photo=False):
         return Policy.objects.filter(id=self.id).aggregate(
-                sum_premiums=Policy.get_query_sum_premium(photo)
-                )['sum_premiums'] or 0
+            sum_premiums=Policy.get_query_sum_premium(photo)
+        )['sum_premiums'] or 0
 
     def claim_ded_rems(self):
         return self.claim_ded_rems
@@ -54,6 +55,7 @@ class Policy(core_models.VersionedModel):
 
     def can_add_insuree(self):
         return self.family.members.filter(validity_to__isnull=True).count() < self.product.max_members
+
     class Meta:
         managed = True
         db_table = 'tblPolicy'
@@ -82,7 +84,7 @@ class Policy(core_models.VersionedModel):
         #     return queryset.filter(
         #         health_facility__location_id__in=[l.location.id for l in dist]
         #     )
-        
+
         return queryset
 
 
@@ -97,13 +99,14 @@ class PolicyRenewal(core_models.VersionedModel):
     policy = models.ForeignKey('policy.Policy', models.DO_NOTHING, db_column='PolicyID',
                                related_name='policy_renewals')
     new_product = models.ForeignKey(Product, db_column='NewProdID', on_delete=models.DO_NOTHING,
-                                       related_name="policy_renewals")
+                                    related_name="policy_renewals")
 
     renewal_prompt_date = fields.DateField(db_column='RenewalPromptDate')
     renewal_date = fields.DateField(db_column='RenewalDate')
     phone_number = models.CharField(db_column='PhoneNumber', max_length=25, blank=True, null=True)
     sms_status = models.SmallIntegerField(db_column='SMSStatus', default=0)  # TODO choices
-    renewal_warnings = models.SmallIntegerField(db_column='RenewalWarnings', null=True, blank=True, default=0)  # TODO choices
+    renewal_warnings = models.SmallIntegerField(
+        db_column='RenewalWarnings', null=True, blank=True, default=0)  # TODO choices
     response_status = models.IntegerField(db_column='ResponseStatus', null=True, blank=True, default=0)  # TODO Choices
     response_date = fields.DateTimeField(db_column='ResponseDate', null=True, blank=True)
 
@@ -116,7 +119,7 @@ class PolicyRenewal(core_models.VersionedModel):
 
 class PolicyMutation(core_models.UUIDModel, core_models.ObjectMutation):
     policy = models.ForeignKey(Policy, models.DO_NOTHING,
-                                 related_name='mutations')
+                               related_name='mutations')
     mutation = models.ForeignKey(
         core_models.MutationLog, models.DO_NOTHING, related_name='policies')
 
