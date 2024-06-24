@@ -209,6 +209,7 @@ def set_value(policy, family, prev_policy, user):
         result_signal = calculation_rule.signal_calculate_event.send(
             sender=instance.__class__.__name__, instance=instance, user=user, context="create", family=family
         )
+        print("result_signal ", result_signal)
         if result_signal[0][1]:
             policy.value = Decimal(result_signal[0][1])
         else:
