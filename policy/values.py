@@ -8,7 +8,7 @@ from contract.models import ContractContributionPlanDetails as ContractContribut
 from core.apps import CoreConfig
 from dateutil.relativedelta import relativedelta
 from core.apps import CoreConfig
-from contribution_plan.models import ContributionPlanBundleDetails
+from contribution_plan.models import ContributionPlan
 
 def cycle_start(product, cycle, ref_date):
     c = getattr(product, "start_cycle_%s" % (cycle + 1), None)
@@ -195,11 +195,11 @@ def set_value(policy, family, prev_policy, user):
     contributions = sum_contributions(product, f_counts)
     general_assembly = sum_general_assemblies(product, f_counts)
     registration = sum_registrations(policy, product, f_counts)
-    # policy.value = Decimal(contributions + general_assembly + registration)
+    policy.value = Decimal(contributions + general_assembly + registration)
     discount(policy, prev_policy)
-    instance = ContributionPlanBundleDetails.objects.filter(
-        contribution_plan_bundle__name=str(
-            "Contribution paamg"
+    instance = ContributionPlan.objects.filter(
+        uuid=str(
+            policy.contribution_plan
         )
     )
     if not instance:
@@ -207,7 +207,7 @@ def set_value(policy, family, prev_policy, user):
     instance = instance[0]
     for calculation_rule in CALCULATION_RULES:
         result_signal = calculation_rule.signal_calculate_event.send(
-            sender=instance.__class__.__name__, instance=instance, user=user, context="create"
+            sender=instance.__class__.__name__, instance=instance, user=user, context="create", family=family
         )
         if result_signal[0][1]:
             policy.value = Decimal(result_signal[0][1])
