@@ -27,6 +27,7 @@ from .gql_queries import *  # lgtm [py/polluting-import]
 from .gql_mutations import *  # lgtm [py/polluting-import]
 
 from .values import policy_values
+from contribution_plan.models import ContributionPlan
 
 
 class Query(graphene.ObjectType):
@@ -36,7 +37,8 @@ class Query(graphene.ObjectType):
         stage=graphene.String(required=True),
         enrollDate=graphene.DateTime(required=True),
         product_id=graphene.Int(required=True),
-        family_id=graphene.Int(required=True)
+        family_id=graphene.Int(required=True),
+        contribution_plan_uuid = graphene.UUID(required=True)
     )
     policies = OrderedDjangoFilterConnectionField(
         PolicyGQLType,
@@ -98,11 +100,20 @@ class Query(graphene.ObjectType):
         if not info.context.user.has_perms(PolicyConfig.gql_query_policies_perms):
             raise PermissionDenied(_("unauthorized"))
 
-        product = Product.objects.filter(
-            Q(validity_to__isnull=True),
-            Q(id=kwargs.get('product_id')) | Q(legacy_id=kwargs.get('product_id')),
-            Q(validity_from__date__lte=kwargs.get('enrollDate')) | Q(date_from__lte=kwargs.get('enrollDate')),
-        ).order_by('-validity_from').first()
+        contribution_plan = ContributionPlan.objects.filter(
+            uuid=str(
+                kwargs.get('contribution_plan_uuid')
+            )
+        )
+        if not contribution_plan:
+            raise Exception("Erreur, le plan de contribution nomé 'Contribution paamg' est introuvale")
+        else:
+            product = Product.objects.filter(id=int(contribution_plan[0].benefit_plan_id)).first()
+        # product = Product.objects.filter(
+        #     Q(validity_to__isnull=True),
+        #     Q(id=kwargs.get('product_id')) | Q(legacy_id=kwargs.get('product_id')),
+        #     Q(validity_from__date__lte=kwargs.get('enrollDate')) | Q(date_from__lte=kwargs.get('enrollDate')),
+        # ).order_by('-validity_from').first()
 
         if not product:
             raise ValidationError('Provided product not available')
@@ -112,6 +123,7 @@ class Query(graphene.ObjectType):
             enroll_date=kwargs.get('enrollDate'),
             start_date=kwargs.get('enrollDate'),
             product=product,
+            contribution_plan=contribution_plan[0].id
         )
         prefetch = Prefetch(
             'members',
