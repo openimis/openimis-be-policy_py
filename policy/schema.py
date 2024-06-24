@@ -36,7 +36,7 @@ class Query(graphene.ObjectType):
         prev_uuid=graphene.String(required=False),
         stage=graphene.String(required=True),
         enrollDate=graphene.DateTime(required=True),
-        product_id=graphene.Int(required=False),
+        # product_id=graphene.Int(required=False),
         family_id=graphene.Int(required=True),
         contribution_plan_uuid = graphene.UUID(required=True)
     )
