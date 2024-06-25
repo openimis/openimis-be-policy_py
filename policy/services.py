@@ -180,7 +180,9 @@ class ByFamilyOrInsureeResponseItem(object):
                  balance,
                  validity_from,
                  validity_to,
-                 max_installments
+                 max_installments,
+                 contribution_plan_code,
+                 contribution_plan_name
                  ):
         self.policy_id = policy_id
         self.policy_uuid = policy_uuid
@@ -204,6 +206,8 @@ class ByFamilyOrInsureeResponseItem(object):
         self.validity_from = validity_from
         self.validity_to = validity_to
         self.max_installments = max_installments
+        self.contribution_plan_code = contribution_plan_code
+        self.contribution_plan_name = contribution_plan_name
 
     def __eq__(self, other):
         return isinstance(other, self.__class__) and self.__dict__ == other.__dict__
@@ -300,6 +304,8 @@ class FilteredPoliciesService(object):
             validity_from=row.validity_from,
             validity_to=row.validity_to,
             max_installments=row.product.max_installments,
+            contribution_plan_code=row.product.contribution_plan.code,
+            contribution_plan_name=row.product.contribution_plan.name
         )
 
     def build_query(self, req):
