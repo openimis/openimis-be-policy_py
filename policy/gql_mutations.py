@@ -25,7 +25,7 @@ class PolicyInputType(OpenIMISMutation.Input):
     start_date = graphene.Date(required=True)
     expiry_date = graphene.Date(required=True)
     value = graphene.Decimal(max_digits=18, decimal_places=2, required=True)
-    # product_id = graphene.Int(required=True)
+    product_id = graphene.Int(required=True)
     family_id = graphene.Int(required=True)
     officer_id = graphene.Int(required=True)
     is_paid = graphene.Boolean(required=False)
