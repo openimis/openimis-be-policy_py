@@ -3,11 +3,12 @@ from django.db.models import Q,Count
 import datetime as py_datetime
 from decimal import *
 from .models import Policy
-
+from .apps import CALCULATION_RULES
+from contract.models import ContractContributionPlanDetails as ContractContributionPlanDetailsModel
 from core.apps import CoreConfig
 from dateutil.relativedelta import relativedelta
 from core.apps import CoreConfig
-
+from contribution_plan.models import ContributionPlan
 
 def cycle_start(product, cycle, ref_date):
     c = getattr(product, "start_cycle_%s" % (cycle + 1), None)
@@ -188,7 +189,7 @@ def discount(policy, prev_policy):
         discount_renew(policy, prev_policy)
 
 
-def set_value(policy, family, prev_policy):
+def set_value(policy, family, prev_policy, user):
     product = policy.product
     f_counts = family_counts(policy.product, family)
     contributions = sum_contributions(product, f_counts)
@@ -196,9 +197,26 @@ def set_value(policy, family, prev_policy):
     registration = sum_registrations(policy, product, f_counts)
     policy.value = Decimal(contributions + general_assembly + registration)
     discount(policy, prev_policy)
+    instance = ContributionPlan.objects.filter(
+        uuid=str(
+            policy.contribution_plan
+        )
+    )
+    if not instance:
+        raise Exception("Le plan de contribution nomé 'Contribution paamg' est introuvale")
+    instance = instance[0]
+    for calculation_rule in CALCULATION_RULES:
+        result_signal = calculation_rule.signal_calculate_event.send(
+            sender=instance.__class__.__name__, instance=instance, user=user, context="create", family=family
+        )
+        print("result_signal ", result_signal)
+        if result_signal[0][1]:
+            policy.value = Decimal(result_signal[0][1])
+        else:
+            raise Exception("Une erreur est survenue lors du traitemant du montant de la police")
 
 
-def policy_values(policy, family, prev_policy):
+def policy_values(policy, family, prev_policy, user):
     members = family.members.filter(validity_to__isnull=True).count()
     max_members = policy.product.max_members
     above_max = max(0, members - max_members)
@@ -207,5 +225,5 @@ def policy_values(policy, family, prev_policy):
         warnings.append(_("policy.validation.members_count_above_max") % {'max': max_members, 'count': members})
     set_start_date(policy)
     set_expiry_date(policy)
-    set_value(policy, family, prev_policy)
+    set_value(policy, family, prev_policy, user)
     return policy, warnings
