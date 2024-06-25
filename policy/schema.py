@@ -36,7 +36,7 @@ class Query(graphene.ObjectType):
         prev_uuid=graphene.String(required=False),
         stage=graphene.String(required=True),
         enrollDate=graphene.DateTime(required=True),
-        # product_id=graphene.Int(required=False),
+        product_id=graphene.Int(required=True),
         family_id=graphene.Int(required=True),
         contribution_plan_uuid = graphene.UUID(required=True)
     )
@@ -107,13 +107,11 @@ class Query(graphene.ObjectType):
         )
         if not contribution_plan:
             raise Exception("Erreur, le plan de contribution nomé 'Contribution paamg' est introuvale")
-        else:
-            product = Product.objects.filter(id=int(contribution_plan[0].benefit_plan_id)).first()
-        # product = Product.objects.filter(
-        #     Q(validity_to__isnull=True),
-        #     Q(id=kwargs.get('product_id')) | Q(legacy_id=kwargs.get('product_id')),
-        #     Q(validity_from__date__lte=kwargs.get('enrollDate')) | Q(date_from__lte=kwargs.get('enrollDate')),
-        # ).order_by('-validity_from').first()
+        product = Product.objects.filter(
+            Q(validity_to__isnull=True),
+            Q(id=kwargs.get('product_id')) | Q(legacy_id=kwargs.get('product_id')),
+            Q(validity_from__date__lte=kwargs.get('enrollDate')) | Q(date_from__lte=kwargs.get('enrollDate')),
+        ).order_by('-validity_from').first()
 
         if not product:
             raise ValidationError('Provided product not available')
