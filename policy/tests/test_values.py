@@ -4,8 +4,8 @@ from django.test import TestCase
 from insuree.test_helpers import create_test_insuree, create_test_photo
 from product.test_helpers import create_test_product
 from insuree.models import Relation
-from .values import *
-from .test_helpers import create_test_policy
+from policy.values import *
+from policy.test_helpers import create_test_policy
 from core.apps import CoreConfig
 from dateutil.relativedelta import relativedelta
 

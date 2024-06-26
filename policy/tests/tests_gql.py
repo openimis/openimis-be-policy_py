@@ -4,6 +4,8 @@ from dataclasses import dataclass
 from core.utils import filter_validity
 from core.models import User
 from core.test_helpers import create_test_interactive_user
+from core.models.openimis_graphql_test_case import openIMISGraphQLTestCase
+
 from django.conf import settings
 from medical.models import Service 
 from graphene_django.utils.testing import GraphQLTestCase
@@ -32,13 +34,10 @@ class DummyContext:
     """ Just because we need a context to generate. """
     user: User
 
-class PolicyGraphQLTestCase(GraphQLTestCase):
-    GRAPHQL_URL = f'/{settings.SITE_ROOT()}graphql'
-    # This is required by some version of graphene but is never used. It should be set to the schema but the import
-    # is shown as an error in the IDE, so leaving it as True.
-    GRAPHQL_SCHEMA = True
-    admin_user = None
+class PolicyGraphQLTestCase(openIMISGraphQLTestCase):
 
+    admin_user = None
+  
     @classmethod
     def setUpClass(cls):
         super().setUpClass()
@@ -317,3 +316,32 @@ class PolicyGraphQLTestCase(GraphQLTestCase):
         # Add some more asserts if you like
         ...
 
+    def test_mutation_simple(self):
+        muuid = "203327cd-501e-41e1-a026-ed742e360081"
+        response = self.query(
+            f'''
+    mutation {{
+      createPolicy(
+        input: {{
+          clientMutationId: "{muuid}"
+          clientMutationLabel: "Création de la police ttttt eeeee (123123123) - 2024-06-01 : 2025-05-31"
+          
+          enrollDate: "2024-04-07"
+            startDate: "2024-06-01"
+            expiryDate: "2025-05-31"
+            value: "10000.00"
+            productId: {self.product.id}
+            familyId: {self.insuree.family.id}
+            officerId: 1
+                    }}
+        ) {{
+            clientMutationId
+            internalId
+        }}
+    }}
+            ''',
+            headers={"HTTP_AUTHORIZATION": f"Bearer {self.admin_token}"},
+            variables={'chfid': self.insuree.chf_id, 'activeOrLastExpiredOnly':True}
+        )
+        content = self.get_mutation_result(muuid,self.admin_token)
+        
