@@ -5,7 +5,7 @@ from datetime import datetime as py_datetime, date as py_date
 import core
 from claim.models import ClaimService, Claim, ClaimItem
 from django import dispatch
-from django.core.exceptions import PermissionDenied
+from django.core.exceptions import PermissionDenied, ValidationError
 from django.db import connection
 from django.db.models import Q, Count, Min, Max, Sum, F
 from django.db.models.functions import Coalesce
@@ -43,6 +43,8 @@ class PolicyService:
     @register_service_signal('policy_service.create_or_update')
     def update_or_create(self, data, user):
         policy_uuid = data.get('uuid', None)
+        if 'enroll_date' in data and data['enroll_date'] > py_date.today():
+            raise ValidationError("policy.enroll_date_in_the_future")
         if policy_uuid:
             return self.update_policy(data, user)
         else:
@@ -50,6 +52,8 @@ class PolicyService:
 
     @register_service_signal('policy_service.update')
     def update_policy(self, data, user):
+        if "is_paid" in data:
+            data.pop("is_paid")
         data = self._clean_mutation_info(data)
         policy_uuid = data.pop('uuid') if 'uuid' in data else None
         policy = Policy.objects.get(uuid=policy_uuid)
@@ -62,11 +66,40 @@ class PolicyService:
 
     @register_service_signal('policy_service.create')
     def create_policy(self, data, user):
+        is_paid = data.pop("is_paid", False)
+        receipt = data.pop("receipt", None)
+        payer_uuid = data.pop("payer_uuid", None)
         data = self._clean_mutation_info(data)
         policy = Policy.objects.create(**data)
+        if receipt is not None:
+            from contribution.services import check_unique_premium_receipt_code_within_product
+            is_invalid = check_unique_premium_receipt_code_within_product(code=receipt, policy_uuid=policy.uuid)
+            if is_invalid:
+                raise ValidationError("Receipt already exist for a given product.")
+        else:
+            receipt = self.generate_contribution_receipt(policy.product, policy.enroll_date)
         policy.save()
         update_insuree_policies(policy, user.id_for_audit)
+        if is_paid:
+            from contribution.gql_mutations import premium_action
+            premium_data = {"policy_uuid": policy.uuid, "amount": policy.value,
+                            "receipt": receipt, "pay_date": data["enroll_date"], "pay_type": "C"}
+            if payer_uuid is not None:
+                premium_data["payer_uuid"] = payer_uuid
+            premium_action(premium_data, user)
         return policy
+
+    def generate_contribution_receipt(self, product, enroll_date):
+        from contribution.models import Premium
+        code_length = PolicyConfig.contribution_receipt_length
+        if not code_length and type(code_length) is not int:
+            raise ValueError("Invalid config for `generate_contribution_receipt`, expected `code_length` value.")
+        prefix = "RE-" + str(product.code) + "-" + str(enroll_date) + "-"
+        last_contribution = Premium.objects.filter(validity_to__isnull=True, receipt__icontains=prefix)
+        code = 0
+        if last_contribution:
+            code = int(last_contribution.latest('receipt').receipt[-code_length:])
+        return prefix + str(code + 1).zfill(code_length)
 
     def _clean_mutation_info(self, data):
         if "client_mutation_id" in data:
@@ -283,10 +316,14 @@ class FilteredPoliciesService(object):
             .annotate(total_rem_delivery=Sum('claim_ded_rems__rem_delivery')) \
             .annotate(total_rem_hospitalization=Sum('claim_ded_rems__rem_hospitalization')) \
             .annotate(total_rem_antenatal=Sum('claim_ded_rems__rem_antenatal'))
-                
         res.query.group_by = ['id']
+        if hasattr(req, 'chf_id'):
+            res= res.filter(insuree_policies__insuree__chf_id = req.chf_id)
         if not req.show_history:
-            res = res.filter(*core.filter_validity())
+            if req.target_date: 
+                res = res.filter(*core.filter_validity(), expiry_date__gt = req.target_date, effective_date__lte = req.target_date)
+            else:
+                res = res.filter(*core.filter_validity())
         if req.active_or_last_expired_only:
             # sort on status, so that any active policy (status = 2) pops up...
             res = res.annotate(not_null_expiry_date=Coalesce('expiry_date', py_date.max)) \
@@ -300,25 +337,17 @@ class ByInsureeService(FilteredPoliciesService):
         super(ByInsureeService, self).__init__(user)
 
     def request(self, by_insuree_request):
-        insurees = Insuree.objects.filter(
-            chf_id=by_insuree_request.chf_id,
-            *core.filter_validity() if not by_insuree_request.show_history else []
-        )
         res = self.build_query(by_insuree_request)
-        res = res.prefetch_related('insuree_policies')
-        res = res.filter(insuree_policies__insuree__in=insurees)
-        # .distinct('product__code') >> DISTINCT ON fields not supported by MS-SQL
-        if by_insuree_request.target_date:
-            res = get_queryset_valid_at_date(res, by_insuree_request.target_date)
+        res = res.filter(insuree_policies__insuree__chf_id=by_insuree_request.chf_id)
         if by_insuree_request.active_or_last_expired_only:
             products = {}
-            for r in res:
-                if r.product.code not in products.keys():
-                    products[r.product.code] = r
+            for policy in res:
+                if policy.status == Policy.STATUS_IDLE or policy.status == Policy.STATUS_READY:
+                    products['policy.product.code-%s' % policy.uuid] = policy
+                elif policy.product.code not in products.keys():
+                    products[policy.product.code] = policy
             res = products.values()
-        items = tuple(
-            map(lambda x: FilteredPoliciesService._to_item(x), res)
-        )
+        items = [FilteredPoliciesService._to_item(x) for x in res]
         # possible improvement: sort via the ORM
         # ... but beware of the active_or_last_expired_only filtering!
         order_attr = to_snake_case(by_insuree_request.order_by if by_insuree_request.order_by else "expiry_date")
@@ -336,11 +365,12 @@ class ByInsureeService(FilteredPoliciesService):
 @core.comparable
 class ByFamilyRequest(object):
 
-    def __init__(self, family_uuid, active_or_last_expired_only=False, show_history=False, order_by=None):
+    def __init__(self, family_uuid, active_or_last_expired_only=False, show_history=False, order_by=None, target_date=None):
         self.family_uuid = family_uuid
         self.active_or_last_expired_only = active_or_last_expired_only
         self.show_history = show_history
         self.order_by = order_by
+        self.target_date = target_date
 
     def __eq__(self, other):
         return isinstance(other, self.__class__) and self.__dict__ == other.__dict__
@@ -362,9 +392,8 @@ class ByFamilyService(FilteredPoliciesService):
         super(ByFamilyService, self).__init__(user)
 
     def request(self, by_family_request):
-        family = Family.objects.get(uuid=by_family_request.family_uuid)
         res = self.build_query(by_family_request)
-        res = res.filter(family_id=family.id)
+        res = res.filter(family__uuid=by_family_request.family_uuid)
         # .distinct('product__code') >> DISTINCT ON fields not supported by MS-SQL
         if by_family_request.active_or_last_expired_only:
             products = {}
@@ -468,8 +497,8 @@ class EligibilityResponse(object):
         return self.__str__()
 
 
-signal_eligibility_service_before = dispatch.Signal(providing_args=["user", "request", "response"])
-signal_eligibility_service_after = dispatch.Signal(providing_args=["user", "request", "response"])
+signal_eligibility_service_before = dispatch.Signal(["user", "request", "response"])
+signal_eligibility_service_after = dispatch.Signal(["user", "request", "response"])
 
 
 class EligibilityService(object):
@@ -620,7 +649,7 @@ class NativeEligibilityService(object):
                                                    if min_date_qs["min_date_lte"]
                                                    else min_date_qs["min_date_all"])
 
-        if queryset_item_or_service.filter(min_date__lte=now).filter(left__isnull=True).first():
+        if queryset_item_or_service.filter(min_date__lte=now).filter(left__isnull=True).order_by('-validity_from').first():
             items_or_services_left = None
         else:
             items_or_services_left = queryset_item_or_service\
@@ -707,6 +736,7 @@ class NativeEligibilityService(object):
                                                   filter=get_total_filter(Service.CATEGORY_VISIT),
                                                   distinct=True), 0)) \
             .annotate(total_visits_left=F("policy__product__max_no_visits") - F("total_visits")) \
+            .order_by('-expiry_date')\
             .first()
 
         if result is None:
