@@ -187,6 +187,8 @@ class Query(graphene.ObjectType):
             policy_value=item.policy_value,
             product_code=item.product_code,
             product_name=item.product_name,
+            contribution_plan_code=item.contribution_plan_code,
+            contribution_plan_name=item.contribution_plan_name,
             start_date=item.start_date,
             enroll_date=item.enroll_date,
             effective_date=item.effective_date,
