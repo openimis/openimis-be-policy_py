@@ -1,3 +1,5 @@
+import logging
+
 from django.utils.translation import gettext as _
 from django.db.models import Q,Count
 import datetime as py_datetime
@@ -6,6 +8,10 @@ from .models import Policy
 
 from core.apps import CoreConfig
 from dateutil.relativedelta import relativedelta
+
+
+logger = logging.getLogger(__name__)
+
 
 def cycle_start(product, cycle, ref_date):
     c = getattr(product, "start_cycle_%s" % (cycle + 1), None)
@@ -63,35 +69,27 @@ def set_expiry_date(policy):
 
 
 def family_counts(product, family):
-    adults = 0
-    other_adults = 0
     extra_adults = 0
-    children = 0
-    other_children = 0
     extra_children = 0
-    total = 0
-    date_threshold = py_datetime.date.today()- relativedelta(years= CoreConfig.age_of_majority)
-    counts= family.members.filter(
-        Q(validity_to__isnull=True),
-    ).aggregate(
-        adults=Count('id',filter=Q(Q(dob__lt=date_threshold) & ~Q(relationship_id=7))),
-        children=Count('id', filter=Q(Q(dob__gte=date_threshold) & ~Q(relationship_id=7))),
-        other_children=Count('id', filter=Q(relationship_id=7, dob__gte=date_threshold)),
-        other_adults=Count('id', filter=Q(relationship_id=7, dob__lt=date_threshold))
-    )
-    adults = counts['adults'] 
-    children =  counts['children'] 
-    other_children =  counts['other_children'] 
-    other_adults =  counts['other_adults'] 
+    date_threshold = py_datetime.date.today() - relativedelta(years=CoreConfig.age_of_majority)
+    counts = (family.members.filter(validity_to__isnull=True)
+                            .aggregate(adults=Count('id', filter=Q(Q(dob__lt=date_threshold) & ~Q(relationship_id=7))),
+                                       children=Count('id', filter=Q(Q(dob__gte=date_threshold) & ~Q(relationship_id=7))),
+                                       other_children=Count('id', filter=Q(relationship_id=7, dob__gte=date_threshold)),
+                                       other_adults=Count('id', filter=Q(relationship_id=7, dob__lt=date_threshold))))
+    adults = counts['adults']
+    children = counts['children']
+    other_children = counts['other_children']
+    other_adults = counts['other_adults']
     
     over_children = 0
     over_adults = 0
 
     if product.max_members:
-        over_adults = max(0,adults   - product.max_members)
-        over_children = max(0,adults  + children  - over_adults - product.max_members)
-        over_other_children = max(0,adults + children + other_children -over_adults -over_children- product.max_members)
-        over_other_adults = max(0,adults  + other_adults + children + other_children -over_adults - over_other_children - over_children - product.max_members)
+        over_adults = max(0, adults - product.max_members)
+        over_children = max(0, adults + children - over_adults - product.max_members)
+        over_other_children = max(0, adults + children + other_children - over_adults - over_children - product.max_members)
+        over_other_adults = max(0, adults + other_adults + children + other_children - over_adults - over_other_children - over_children - product.max_members)
         
     # remove over from count
     children -= over_children
@@ -99,19 +97,19 @@ def family_counts(product, family):
     other_children -= over_other_children
     other_adults -= over_other_adults
     if product.threshold:   
-        extra_adults = max(0, adults -   product.threshold)
-        extra_children = max(0,children + adults - extra_adults - product.threshold)
+        extra_adults = max(0, adults - product.threshold)
+        extra_children = max(0, children + adults - extra_adults - product.threshold)
 
-
-    return {
-        "adults":adults -extra_adults, # adult part of the "lump sum"
-        "extra_adults": extra_adults, # adult not part of the "lump sum" because of threshold
-        "other_adults": other_adults , # adult never of the "lump sum"
+    result = {
+        "adults": adults - extra_adults,  # adult part of the "lump sum"
+        "extra_adults": extra_adults,  # adult not part of the "lump sum" because of threshold
+        "other_adults": other_adults,  # adult never of the "lump sum"
         "children": children-extra_children,  # children part of the "lump sum"
-        "extra_children": extra_children, # children never part of the "lump sum" because of threshold
-        "other_children": other_children,# children never part of the "lump sum"
-        "total": adults  + other_adults + children  +  other_children,
+        "extra_children": extra_children,  # children never part of the "lump sum" because of threshold
+        "other_children": other_children,  # children never part of the "lump sum"
+        "total": adults + other_adults + children + other_children,
     }
+    return result
 
 
 def get_attr(product, attr):
@@ -184,11 +182,18 @@ def discount(policy, prev_policy):
 def set_value(policy, family, prev_policy):
     product = policy.product
     f_counts = family_counts(policy.product, family)
+    logger.info(f"Calculating policy value - calculating number of members in the family - {f_counts}")
     contributions = sum_contributions(product, f_counts)
+    logger.info(f"Calculating policy value - calculating contributions fees - {contributions}")
     general_assembly = sum_general_assemblies(product, f_counts)
+    logger.info(f"Calculating policy value - calculating general assembly fees - {general_assembly}")
     registration = sum_registrations(policy, product, f_counts)
-    policy.value = Decimal(contributions + general_assembly + registration)
+    logger.info(f"Calculating policy value - calculating registrations fees - {registration}")
+    value_before_discount = Decimal(contributions + general_assembly + registration)
+    logger.info(f"Calculating policy value - before discount - {value_before_discount}")
+    policy.value = value_before_discount
     discount(policy, prev_policy)
+    logger.info(f"Calculating policy value - after discount - {policy.value}")
 
 
 def policy_values(policy, family, prev_policy):
