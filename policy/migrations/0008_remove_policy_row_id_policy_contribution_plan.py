@@ -12,10 +12,6 @@ class Migration(migrations.Migration):
     ]
 
     operations = [
-        migrations.RemoveField(
-            model_name='policy',
-            name='row_id',
-        ),
         migrations.AddField(
             model_name='policy',
             name='contribution_plan',
