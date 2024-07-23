@@ -11,6 +11,7 @@ from graphql import ResolveInfo
 from insuree.models import Family
 from product.models import Product
 from contribution_plan.models import ContributionPlan
+from django.utils import timezone as django_tz
 
 class Policy(core_models.VersionedModel):
     id = models.AutoField(db_column='PolicyID', primary_key=True)
@@ -35,6 +36,7 @@ class Policy(core_models.VersionedModel):
     contribution_plan = models.ForeignKey(ContributionPlan, models.DO_NOTHING,
                                 db_column='ContributionPlanID', related_name="contribution_plans",
                                 blank=True, null=True,)
+    creation_date = models.DateField(db_column='creationDate', default=django_tz.now, blank=True, null=True)
     # row_id = models.BinaryField(db_column='RowID', blank=True, null=True)
 
     @staticmethod
