@@ -19,7 +19,7 @@ from insuree.models import Insuree, Family, InsureePolicy
 from insuree.services import create_insuree_renewal_detail
 from medical.models import Service, Item
 from policy.apps import PolicyConfig
-from policy.utils import MonthsAdd
+from policy.utils import MonthsAdd, get_members
 
 from .models import Policy, PolicyRenewal
 
@@ -56,20 +56,29 @@ class PolicyService:
     def update_policy(self, data, user):
         if "is_paid" in data:
             data.pop("is_paid")
+        members = None
+        if "members_uuid" in data:
+            members_uuid = data.pop("members_uuid", None)
+            members = Insuree.objects.filter(uuid__in=members_uuid) if members_uuid else None
         data = self._clean_mutation_info(data)
         policy_uuid = data.pop('uuid') if 'uuid' in data else None
         policy = Policy.objects.get(uuid=policy_uuid)
+        members = get_members(policy, policy.family, user, members)
         policy.save_history()
         reset_policy_before_update(policy)
         [setattr(policy, key, data[key]) for key in data]
         policy.save()
-        update_insuree_policies(policy, user.id_for_audit)
+        update_insuree_policies(policy, user, members=members)
         return policy
 
     @register_service_signal('policy_service.create')
     def create_policy(self, data, user):
         is_paid = data.pop("is_paid", False)
         receipt = data.pop("receipt", None)
+        members = None
+        if "members_uuid" in data:
+            members_uuid = data.pop("members_uuid", None)
+            members = Insuree.objects.filter(uuid__in=members_uuid) if members_uuid else None
         payer_uuid = data.pop("payer_uuid", None)
         data = self._clean_mutation_info(data)
         policy = Policy.objects.create(**data)
@@ -81,7 +90,7 @@ class PolicyService:
         else:
             receipt = self.generate_contribution_receipt(policy.product, policy.enroll_date)
         policy.save()
-        update_insuree_policies(policy, user.id_for_audit)
+        update_insuree_policies(policy, user, members=members)
         if is_paid:
             from contribution.gql_mutations import premium_action
             premium_data = {"policy_uuid": policy.uuid, "amount": policy.value,
@@ -1029,8 +1038,9 @@ HOF{% endif %}
     return sms_queue
 
 
-def update_insuree_policies(policy, audit_user_id):
-    for member in policy.family.members.filter(validity_to__isnull=True):
+def update_insuree_policies(policy, user, members=None):
+    members = get_members(policy, policy.family, user, members)
+    for member in members:
         existing_ip = InsureePolicy.objects.filter(validity_to__isnull=True, insuree=member, policy=policy).first()
         if existing_ip:
             existing_ip.save_history()
@@ -1042,7 +1052,7 @@ def update_insuree_policies(policy, audit_user_id):
                 effective_date=policy.effective_date,
                 expiry_date=policy.expiry_date,
                 offline=policy.offline,
-                audit_user_id=audit_user_id
+                audit_user_id=user.id_for_audit if hasattr(user, 'audit_user_id') else user
             )
         )
         if ip_created:
