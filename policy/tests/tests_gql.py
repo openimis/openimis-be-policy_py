@@ -343,5 +343,5 @@ class PolicyGraphQLTestCase(openIMISGraphQLTestCase):
             headers={"HTTP_AUTHORIZATION": f"Bearer {self.admin_token}"},
             variables={'chfid': self.insuree.chf_id, 'activeOrLastExpiredOnly':True}
         )
-        content = self.get_mutation_result(muuid,self.admin_token)
+        content = self.get_mutation_result(muuid, self.admin_token)
         
