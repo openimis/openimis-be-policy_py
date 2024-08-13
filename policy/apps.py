@@ -48,7 +48,6 @@ class PolicyConfig(AppConfig):
     ACTIVATION_OPTION_READY = None
     activation_option = None
     contribution_receipt_length = None
-    comores_features_enabled = None
 
     def __load_config(self, cfg):
         for field in cfg:
