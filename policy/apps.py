@@ -24,7 +24,6 @@ DEFAULT_CFG = {
     "CTIVATION_OPTION_PAYMENT": 2,
     "ACTIVATION_OPTION_READY": 3,
     "contribution_receipt_length": 5,
-    "comores_features_enabled": False
 }
 
 class PolicyConfig(AppConfig):
