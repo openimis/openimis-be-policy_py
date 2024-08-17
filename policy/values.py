@@ -200,7 +200,7 @@ def set_value(policy, members, prev_policy, user):
         uuid=policy.contribution_plan
     ).first() if policy.contribution_plan else None
     policy_value = run_calculation_rules(
-        sender=instance.__class__.__name__, instance=instance, user=user, context="create", family=family
+        sender=instance.__class__.__name__, instance=instance, user=user, context="policy_value", family=family
     ) if instance else None
     # to allow 0 as policy value
     if policy_value is not None:

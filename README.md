@@ -60,3 +60,25 @@ None
 * claim.models.ClaimOfficer
 * insuree.models.Family
 * product.models.Product
+
+## strategy context
+
+### member list
+
+Contribution plan strategy can propose the member list by providing an execution context "members", it must return a list of insuree (queryset not yet supported)
+
+### policy value
+
+Contribution plan strategy can propose policy value by providing an execution context "value", it must return a decimal
+
+### validity
+
+TODO
+Contribution plan strategy can propose policy value by providing an execution context "validity", it must return a dict with 
+- 'enroll_date'
+- 'start_date'
+- 'effective_date'
+- 'expiry_date'
+
+
+

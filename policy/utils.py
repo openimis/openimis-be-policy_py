@@ -59,7 +59,7 @@ def get_members(policy, family, user, members=None):
         ).first() if policy.contribution_plan else None
         if instance:
             members = run_calculation_rules(
-                sender=instance.__class__.__name__, instance=instance, user=user, context="get_members", family=family
+                sender=instance.__class__.__name__, instance=instance, user=user, context="members", family=family
             )
     # fallback on family
     if not members:
