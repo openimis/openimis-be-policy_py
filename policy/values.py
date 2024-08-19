@@ -223,7 +223,7 @@ def policy_values(policy, family, prev_policy, user, members=None):
     above_max = max(0, len(members or []) - max_members)
     warnings = []
     if above_max:
-        warnings.append(_("policy.validation.members_count_above_max") % {'max': max_members, 'count': members})
+        warnings.append(_("policy.validation.members_count_above_max") % {'max': max_members, 'count': len(members)})
     set_start_date(policy)
     set_expiry_date(policy)
     set_value(policy, members, prev_policy, user)
