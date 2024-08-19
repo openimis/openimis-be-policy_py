@@ -345,3 +345,20 @@ class PolicyGraphQLTestCase(openIMISGraphQLTestCase):
         )
         content = self.get_mutation_result(muuid, self.admin_token)
         
+    def test_insuree_policy_value_query(self):
+
+        response = self.query(
+            f'''
+                {{
+                policyValues(stage: "R",enrollDate: "2019-09-26T00:00:00",productId: {self.product.id},familyId: {self.insuree.family.id})
+                {{
+                    policy{{startDate expiryDate value}},warnings
+                }}
+                }} ''',
+            headers={"HTTP_AUTHORIZATION": f"Bearer {self.admin_token}"},
+        )
+
+        content = json.loads(response.content)
+
+        # This validates the status code and if you get errors
+        self.assertResponseNoErrors(response)

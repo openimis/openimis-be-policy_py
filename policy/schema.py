@@ -36,9 +36,9 @@ class Query(graphene.ObjectType):
         prev_uuid=graphene.String(required=False),
         stage=graphene.String(required=True),
         enrollDate=graphene.DateTime(required=True),
-        product_id=graphene.Int(required=True),
+        product_id=graphene.Int(required=False),
         family_id=graphene.Int(required=True),
-        contribution_plan_uuid = graphene.UUID(required=True)
+        contribution_plan_uuid=graphene.UUID(required=False)
     )
     policies = OrderedDjangoFilterConnectionField(
         PolicyGQLType,
@@ -99,29 +99,38 @@ class Query(graphene.ObjectType):
     def resolve_policy_values(self, info, **kwargs):
         if not info.context.user.has_perms(PolicyConfig.gql_query_policies_perms):
             raise PermissionDenied(_("unauthorized"))
+        cp_uuid = None
+        product_id = None
+        if 'contribution_plan_uuid' in kwargs:
+            cp_uuid = str(kwargs.get('contribution_plan_uuid'))
+            contribution_plan = ContributionPlan.objects.filter(uuid=cp_uuid).first()
+            if not contribution_plan:
+                raise ValueError(f"Contribution plan {cp_uuid} not found")
+            
+            if not contribution_plan.benefit_plan_type.name == 'product':
+                raise ValueError(f"Contribution plan {cp_uuid} is not attached to a product")
+            product_id = contribution_plan.benefit_plan
+        elif 'product_id' in kwargs:
+            product_id = kwargs.get('product_id') 
+        else:
+           raise ValueError("Product or contribution plan is mandatory") 
 
-        contribution_plan = ContributionPlan.objects.filter(
-            uuid=str(
-                kwargs.get('contribution_plan_uuid')
-            )
-        )
-        if not contribution_plan:
-            raise Exception("Erreur, le plan de contribution nomé 'Contribution paamg' est introuvale")
-        product = Product.objects.filter(
-            Q(validity_to__isnull=True),
-            Q(id=kwargs.get('product_id')) | Q(legacy_id=kwargs.get('product_id')),
-            Q(validity_from__date__lte=kwargs.get('enrollDate')) | Q(date_from__lte=kwargs.get('enrollDate')),
-        ).order_by('-validity_from').first()
-
+        product = None
+        if product_id:
+            product = Product.objects.filter(
+                Q(validity_to__isnull=True),
+                Q(id=product_id) | Q(legacy_id=product_id),
+                Q(validity_from__date__lte=kwargs.get('enrollDate')) | Q(date_from__lte=kwargs.get('enrollDate')),
+            ).order_by('-validity_from').first()
+            
         if not product:
-            raise ValidationError('Provided product not available')
-
+            raise ValueError(f"product {product_id} not found")
         policy = PolicyGQLType(
             stage=kwargs.get('stage'),
             enroll_date=kwargs.get('enrollDate'),
             start_date=kwargs.get('enrollDate'),
             product=product,
-            contribution_plan=contribution_plan[0].id
+            contribution_plan=cp_uuid
         )
         prefetch = Prefetch(
             'members',

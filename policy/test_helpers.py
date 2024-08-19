@@ -6,6 +6,7 @@ from policy.values import policy_values
 from product.models import Product
 from core.utils import filter_validity
 from core.models.user import User
+from core.test_helpers import create_test_interactive_user
 import datetime
 
 
@@ -19,7 +20,7 @@ def dts(s):
     return datetime.datetime.strptime(s, "%Y-%m-%d").date()
 
 def create_test_policy2(product, insuree, link=True, valid=True, custom_props=None, check=False):
-    user = User.objects.filter(username='admin', validity_to__isnull=True).first()
+    user = create_test_interactive_user()
     """
     Creates a Policy and optionally an InsureePolicy
     :param product: Product on which this Policy is based (or its ID)

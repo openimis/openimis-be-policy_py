@@ -7,6 +7,7 @@ from insuree.models import Relation
 from policy.values import *
 from policy.test_helpers import create_test_policy
 from core.apps import CoreConfig
+from core.test_helpers import create_test_interactive_user
 from dateutil.relativedelta import relativedelta
 from core.models.user import User
 class PolicyValuesTestCase(TestCase):
@@ -17,7 +18,7 @@ class PolicyValuesTestCase(TestCase):
     @classmethod
     def setUpClass(cls):
         super().setUpClass()
-        cls.user = User.objects.filter(username='admin', validity_to__isnull=True).first()
+        cls.user = create_test_interactive_user()
         
         
     def test_new_policy_basis(self):

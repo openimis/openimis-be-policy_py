@@ -49,9 +49,9 @@ def get_members(policy, family, user, members=None):
     if members:
         return members
     # get the current policy members
-    members = [ip.insuree for ip in policy.insuree_policies.filter(validity_to__isnull=True)]
+    
     # look in calculation rules
-    if not members:
+    if policy.contribution_plan:
         instance = ContributionPlan.objects.filter(
             uuid=str(
                 policy.contribution_plan
@@ -61,6 +61,8 @@ def get_members(policy, family, user, members=None):
             members = run_calculation_rules(
                 sender=instance.__class__.__name__, instance=instance, user=user, context="members", family=family
             )
+    if not members and policy.insuree_policies:
+        members = [ip.insuree for ip in policy.insuree_policies.filter(validity_to__isnull=True)]
     # fallback on family
     if not members:
         members = family.members.filter(validity_to__isnull=True).all()
