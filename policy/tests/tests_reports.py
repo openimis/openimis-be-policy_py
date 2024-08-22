@@ -5,7 +5,7 @@ from dataclasses import copy, dataclass
 from graphql_jwt.shortcuts import get_token
 from core.models import User
 from django.conf import settings
-
+from django.db import connection
 
 @dataclass
 class DummyContext:
@@ -26,6 +26,8 @@ class ReportAPITests( APITestCase):
         cls.admin_token = get_token(cls.admin_user, DummyContext(user=cls.admin_user))
         
     def test_primary_operational_indicators_report(self):
+        if not connection.vendor == "postgresql":
+            self.skipTest("This test can only be executed for MSSQL database")
         headers={"HTTP_AUTHORIZATION": f"Bearer {self.admin_token}"}
         response = self.client.get(self.POI_URL, format='application/pdf', **headers)
         self.assertEqual(response.status_code, status.HTTP_200_OK)

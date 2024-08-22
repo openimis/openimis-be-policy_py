@@ -344,7 +344,7 @@ class EligibilityServiceTestCase(TestCase):
         item = create_test_item("A")
         item_pl_detail = add_item_to_hf_pricelist(item)
         product_item = create_test_product_item(product, item, custom_props={"limit_no_adult": 12})
-        claim = create_test_claim(custom_props={"insuree_id": insuree.id})
+        claim = create_test_claim(custom_props={"insuree_id": insuree.id, 'date_to': None})
         claim_item = create_test_claimitem(claim, "A", custom_props={"item_id": item.id})
         errors = validate_claim(claim, True)
         errors += validate_assign_prod_to_claimitems_and_services(claim)

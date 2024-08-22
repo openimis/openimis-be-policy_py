@@ -52,10 +52,10 @@ def create_test_policy2(product, insuree, link=True, valid=True, custom_props=No
             insuree=insuree,
             policy=policy,
             audit_user_id=-1,
-            effective_date=dts("2019-01-01"),
-            expiry_date=dts("2039-06-01"),
-            validity_from=dts("2019-01-01"),
-            validity_to=None if valid else dts("2019-01-01"),
+            effective_date=policy.effective_date,
+            expiry_date=policy.expiry_date,
+            validity_from=policy.validity_from,
+            validity_to=None if valid else policy.validity_from,
         )
     else:
         insuree_policy = None
