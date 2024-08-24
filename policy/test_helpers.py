@@ -10,7 +10,7 @@ from core.test_helpers import create_test_interactive_user
 import datetime
 
 
-def create_test_policy(product, insuree, link=True, valid=True, custom_props=None, check=False):
+def create_test_policy(product, insuree, link=True, valid=True, custom_props={}, check=False):
     """
     Compatibility method that only return the Policy
     """
@@ -19,7 +19,8 @@ def create_test_policy(product, insuree, link=True, valid=True, custom_props=Non
 def dts(s):
     return datetime.datetime.strptime(s, "%Y-%m-%d").date()
 
-def create_test_policy2(product, insuree, link=True, valid=True, custom_props=None, check=False):
+
+def create_test_policy2(product, insuree, link=True, valid=True, custom_props={}, check=False):
     user = create_test_interactive_user()
     """
     Creates a Policy and optionally an InsureePolicy
@@ -31,32 +32,50 @@ def create_test_policy2(product, insuree, link=True, valid=True, custom_props=No
     :param custom_props: dictionary of custom values for the Policy, when overriding a foreign key, override the _id
     :return: The created Policy and InsureePolicy
     """
-    policy = Policy.objects.create(
-        **{
-            "family": insuree.family,
-            "product_id": product.id if isinstance(product, Product) else product,
-            "status": Policy.STATUS_ACTIVE,
-            "stage": Policy.STAGE_NEW,
-            "enroll_date": dts("2019-01-01"),
-            "start_date": dts("2019-01-02"),
-            "validity_from": dts("2019-01-01"),
-            "effective_date": dts("2019-01-01"),
-            "expiry_date": dts("2039-06-01"),
-            "validity_to": None if valid else dts("2019-01-01"),
-            "audit_user_id": -1,
-            **(custom_props if custom_props else {})
-        }
-    )
+    policy_qs = Policy.objects.filter(
+        family=insuree.family,
+        product=product,
+        *filter_validity()
+        )
+    if custom_props:
+        policy_qs = policy_qs.filter(**custom_props)
+    policy = policy_qs.first()
+    
+    if not policy:
+        policy = Policy.objects.create(
+            **{
+                "family": insuree.family,
+                "product_id": product.id if isinstance(product, Product) else product,
+                "status": Policy.STATUS_ACTIVE,
+                "stage": Policy.STAGE_NEW,
+                "enroll_date": dts("2019-01-01"),
+                "start_date": dts("2019-01-02"),
+                "validity_from": dts("2019-01-01"),
+                "effective_date": dts("2019-01-01"),
+                "expiry_date": dts("2039-06-01"),
+                "validity_to": None if valid else dts("2019-01-01"),
+                "audit_user_id": -1,
+                **custom_props
+            }
+        )
+    elif custom_props:
+        policy.update(**custom_props)
+        
     if link:
-        insuree_policy = InsureePolicy.objects.create(
+        insuree_policy = InsureePolicy.objects.filter(
             insuree=insuree,
             policy=policy,
-            audit_user_id=-1,
-            effective_date=policy.effective_date,
-            expiry_date=policy.expiry_date,
-            validity_from=policy.validity_from,
-            validity_to=None if valid else policy.validity_from,
-        )
+            *filter_validity()).first()
+        if not insuree_policy:
+            insuree_policy = InsureePolicy.objects.create(
+                insuree=insuree,
+                policy=policy,
+                audit_user_id=-1,
+                effective_date=policy.effective_date,
+                expiry_date=policy.expiry_date,
+                validity_from=policy.validity_from,
+                validity_to=None if valid else policy.validity_from,
+            )
     else:
         insuree_policy = None
     # Was added for OMT-333 but breaks tests that explicitly call policy_values
@@ -134,7 +153,7 @@ def create_test_policy_with_IPs(product, insuree, valid=True, policy_props=None,
     return policy
 
 
-def create_test_insuree_for_policy(with_family=True, is_head=False, custom_props=None, family_custom_props=None):
+def create_test_insuree_for_policy(with_family=True, is_head=False, custom_props={}, family_custom_props={}):
     # To establish the mandatory reference between "Insuree" and "Family" objects, we can insert the "Family" object
     # with a temporary ID and later update it to associate with the respective "Insuree" object.
     insuree=  create_test_insuree(with_family=with_family, is_head=is_head, custom_props=custom_props, family_custom_props=family_custom_props)

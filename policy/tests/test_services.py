@@ -519,12 +519,12 @@ class RenewalsTestCase(TestCase):
         insuree_sms = [sms for sms in sms_queue if sms.phone == "+33644444719"]
         self.assertEquals(len(insuree_sms), 1)
         self.assertEquals(
-            insuree_sms[0].sms_message, "FAMSMS;TESTCHFSMS;Test Last;Test product VISIT"
+            insuree_sms[0].sms_message, f"FAMSMS;{insuree.chf_id};Test Last;Test product VISIT"
         )
 
         officer_sms = [sms for sms in sms_queue if sms.phone == "+32444444444"]
         self.assertEquals(len(officer_sms), 1)
-        self.assertIn("TESTCHFSMS", officer_sms[0].sms_message)
+        self.assertIn(insuree.chf_id, officer_sms[0].sms_message)
         self.assertIn(family.location.name, officer_sms[0].sms_message)
         self.assertIn(family.location.parent.name, officer_sms[0].sms_message)
         self.assertIn(family.location.parent.parent.name, officer_sms[0].sms_message)
@@ -589,9 +589,9 @@ class RenewalsTestCase(TestCase):
         # ALSO WHEN
         sms_queue = policy_renewal_sms("UNUSED")  # Uses the default template
         self.assertEquals(len(sms_queue), 2)
-        old_sms = [sms.sms_message for sms in sms_queue if "CHFMARK" in sms.sms_message]
+        old_sms = [sms.sms_message for sms in sms_queue if insuree_oldpic.chf_id in sms.sms_message]
         self.assertEquals(len(old_sms), 1)
-        self.assertTrue("HOF\nCHFMARK\nTest Last First Second\n\n" in old_sms[0])
+        self.assertTrue(f"HOF\n{insuree_oldpic.chf_id}\nTest Last First Second\n\n" in old_sms[0])
 
         # tearDown
         renewals_old.first().details.all().delete()
