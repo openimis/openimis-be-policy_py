@@ -95,6 +95,7 @@ def family_counts(product, family):
     over_children = 0
     over_adults = 0
     over_other_children = 0
+    over_other_adults = 0
 
     if product.max_members:
         over_adults = max(0,adults   - product.max_members)
