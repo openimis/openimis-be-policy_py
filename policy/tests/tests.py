@@ -12,7 +12,7 @@ from product.test_helpers import create_test_product, create_test_product_servic
 
 class TaskGroupServiceTest(TestCase):
     def test_helper(self):
-        insuree, family = create_test_insuree_for_policy(with_family=True, is_head=False, custom_props={"chf_id": "paysimp"}, family_custom_props=None)
+        insuree, family = create_test_insuree_for_policy(with_family=True, is_head=False, custom_props={"chf_id": "paysimp"}, family_custom_props={})
         product = create_test_product("ELI1")
         (policy, insuree_policy) = create_test_policy2(product, insuree, custom_props={
             "value": 1000, "status": Policy.STATUS_IDLE})

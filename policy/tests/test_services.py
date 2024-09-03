@@ -18,6 +18,8 @@ from medical_pricelist.test_helpers import (
     create_test_item_pricelist,
     create_test_service_pricelist
 )
+from django.db import connection
+
 
 class EligibilityServiceTestCase(TestCase):
     def setUp(self) -> None:
