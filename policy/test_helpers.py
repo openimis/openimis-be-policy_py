@@ -10,7 +10,7 @@ from core.test_helpers import create_test_interactive_user
 import datetime
 
 
-def create_test_policy(product, insuree, link=True, valid=True, custom_props={}, check=False):
+def create_test_policy(product, insuree, link=True, valid=True, custom_props=None, check=False):
     """
     Compatibility method that only return the Policy
     """
@@ -20,7 +20,7 @@ def dts(s):
     return datetime.datetime.strptime(s, "%Y-%m-%d").date()
 
 
-def create_test_policy2(product, insuree, link=True, valid=True, custom_props={}, check=False):
+def create_test_policy2(product, insuree, link=True, valid=True, custom_props=None, check=False):
     user = create_test_interactive_user()
     """
     Creates a Policy and optionally an InsureePolicy
@@ -36,10 +36,25 @@ def create_test_policy2(product, insuree, link=True, valid=True, custom_props={}
         family=insuree.family,
         product=product,
         *filter_validity()
-        )
+    )
+    if custom_props is None:
+        custom_props = {}
+    else:
+        custom_props = {k: v for k, v in custom_props.items() if hasattr(Policy, k)}
     if custom_props:
         policy_qs = policy_qs.filter(**custom_props)
     policy = policy_qs.first()
+    
+    fallback_start_date = datetime.date(
+        datetime.date.today().year,
+        1,
+        1
+    )
+    fallback_end_date = datetime.date(
+        datetime.date.today().year,
+        12,
+        31
+    )
     
     if not policy:
         policy = Policy.objects.create(
@@ -48,12 +63,12 @@ def create_test_policy2(product, insuree, link=True, valid=True, custom_props={}
                 "product_id": product.id if isinstance(product, Product) else product,
                 "status": Policy.STATUS_ACTIVE,
                 "stage": Policy.STAGE_NEW,
-                "enroll_date": dts("2019-01-01"),
-                "start_date": dts("2019-01-02"),
-                "validity_from": dts("2019-01-01"),
-                "effective_date": dts("2019-01-01"),
-                "expiry_date": dts("2039-06-01"),
-                "validity_to": None if valid else dts("2019-01-01"),
+                "enroll_date": fallback_start_date,
+                "start_date": fallback_start_date,
+                "validity_from": fallback_start_date,
+                "effective_date": fallback_start_date,
+                "expiry_date": fallback_end_date,
+                "validity_to": None if valid else fallback_start_date,
                 "audit_user_id": -1,
                 **custom_props
             }
@@ -82,6 +97,7 @@ def create_test_policy2(product, insuree, link=True, valid=True, custom_props={}
     policy, warnings = policy_values(policy, insuree.family, None, user, members=[insuree])
     if check and warnings:
         raise Exception("Policy has warnings: {}".format(warnings))
+
     return policy, insuree_policy
 
 
@@ -149,14 +165,23 @@ def create_test_policy_with_IPs(product, insuree, valid=True, policy_props=None,
             **(premium_props if premium_props else {})
         }
     )
-
+    # reseting custom props to avoid having it in next calls
+    policy_props = {}
+    IP_props = {}
+    premium_props = {}
     return policy
 
 
-def create_test_insuree_for_policy(with_family=True, is_head=False, custom_props={}, family_custom_props={}):
+def create_test_insuree_for_policy(with_family=True, is_head=False, custom_props=None, family_custom_props=None):
     # To establish the mandatory reference between "Insuree" and "Family" objects, we can insert the "Family" object
     # with a temporary ID and later update it to associate with the respective "Insuree" object.
-    insuree=  create_test_insuree(with_family=with_family, is_head=is_head, custom_props=custom_props, family_custom_props=family_custom_props)
+    insuree = create_test_insuree(
+        with_family=with_family,
+        is_head=is_head,
+        custom_props=custom_props,
+        family_custom_props=family_custom_props
+    )
 
+    family_custom_props = {}
 
     return insuree, insuree.family
