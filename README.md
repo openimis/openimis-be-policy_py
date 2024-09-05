@@ -73,7 +73,7 @@ Contribution plan strategy can propose policy value by providing an execution co
 
 ### validity
 
-TODO
+
 Contribution plan strategy can propose policy value by providing an execution context "validity", it must return a dict with 
 - 'enroll_date'
 - 'start_date'
