@@ -175,17 +175,6 @@ class EligibilityServiceTestCase(TestCase):
         self.assertIsNotNone(native_response)
         self.assertEquals(native_response, expected_resposnse)
 
-        family.delete()
-        claim.dedrems.all().delete()
-        claim_service.delete()
-        claim.delete()
-        product_service.delete()
-        svc_pl_detail.delete()
-        service.delete()
-        policy.insuree_policies.all().delete()
-        policy.delete()
-        product.delete()
-        insuree.delete()
 
     def test_eligibility_item(self):
         if not connection.vendor == "mssql":
@@ -233,17 +222,6 @@ class EligibilityServiceTestCase(TestCase):
         self.assertIsNotNone(native_response)
         self.assertEquals(native_response, expected_resposnse)
 
-        family.delete()
-        claim.dedrems.all().delete()
-        claim_item.delete()
-        claim.delete()
-        product_item.delete()
-        item_pl_detail.delete()
-        item.delete()
-        policy.insuree_policies.all().delete()
-        policy.delete()
-        product.delete()
-        insuree.delete()
 
     def test_eligibility_by_insuree(self):
         if not connection.vendor == "mssql":
@@ -291,17 +269,7 @@ class EligibilityServiceTestCase(TestCase):
         self.assertIsNotNone(native_response)
         self.assertEquals(native_response, expected_resposnse)
 
-        family.delete()
-        claim.dedrems.all().delete()
-        claim_item.delete()
-        claim.delete()
-        product_item.delete()
-        item_pl_detail.delete()
-        item.delete()
-        policy.insuree_policies.all().delete()
-        policy.delete()
-        product.delete()
-        insuree.delete()
+
 
     @skip("Not sure what is the proper behaviour when an IP is not present, skipping for now so that the main case"
           "can be fixed.")
@@ -325,14 +293,6 @@ class EligibilityServiceTestCase(TestCase):
         self.assertIsNotNone(native_response)
         self.assertIsNotNone(sp_response)
         self.assertEquals(native_response, sp_response)
-
-        product_item.delete()
-        item_pl_detail.delete()
-        item.delete()
-        policy.insuree_policies.all().delete()
-        policy.delete()
-        product.delete()
-        insuree.delete()
 
     def test_eligibility_signal(self):
         
@@ -369,17 +329,7 @@ class EligibilityServiceTestCase(TestCase):
         self.assertEquals(response.total_admissions_left, 444719)
 
         signal_eligibility_service_before.disconnect(signal_before)
-        claim.dedrems.all().delete()
-        claim_item.delete()
-        claim.delete()
-        product_item.delete()
-        item_pl_detail.delete()
-        item.delete()
-        policy.insuree_policies.all().delete()
-        policy.delete()
-        product.delete()
-        insuree.delete()
-        family.delete()
+
 
 
 class RenewalsTestCase(TestCase):
@@ -427,16 +377,7 @@ class RenewalsTestCase(TestCase):
         should_not_renew = renewals.filter(policy=policy_not_expiring).first()
         self.assertIsNone(should_not_renew)
 
-        # tearDown
-        renewals.delete()
-        inspolicy_expiring.delete()
-        policy_expiring.delete()
-        inspolicy_not_expiring.delete()
-        policy_not_expiring.delete()
-        officer.delete()
-        product.delete()
-        insuree.delete()
-        family.delete()
+
 
     def test_update_renewals(self):
         # Given
@@ -470,15 +411,7 @@ class RenewalsTestCase(TestCase):
         self.assertEquals(policy_expiring.status, Policy.STATUS_EXPIRED)
         self.assertEquals(policy_not_expired_yet.status, Policy.STATUS_ACTIVE)
 
-        # tearDown
-        inspolicy_expiring.delete()
-        policy_expiring.delete()
-        inspolicy_not_expired_yet.delete()
-        policy_not_expired_yet.delete()
-        officer.delete()
-        product.delete()
-        insuree.delete()
-        family.delete()
+
 
     def test_renewals_sms(self):
         # Given
@@ -532,16 +465,7 @@ class RenewalsTestCase(TestCase):
         self.assertIn(family.location.parent.parent.name, officer_sms[0].sms_message)
         self.assertIn("Test product VISIT", officer_sms[0].sms_message)
 
-        # tearDown
-        officer.policy_renewals.all().delete()
-        policy_expiring.insuree_policies.all().delete()
-        policy_expiring.delete()
-        policy_not_expired_yet.insuree_policies.all().delete()
-        policy_not_expired_yet.delete()
-        officer.delete()
-        product.delete()
-        insuree.delete()
-        family.delete()
+
 
     def test_insert_renewal_details(self):
         # Given
@@ -595,20 +519,3 @@ class RenewalsTestCase(TestCase):
         self.assertEquals(len(old_sms), 1)
         self.assertTrue(f"HOF\n{insuree_oldpic.chf_id}\nTest Last First Second\n\n" in old_sms[0])
 
-        # tearDown
-        renewals_old.first().details.all().delete()
-        renewals_old.delete()
-        renewals_new.first().details.all().delete()
-        renewals_new.delete()
-        inspolicy_old_pic.delete()
-        policy_old_pic.delete()
-        inspolicy_new_pic.delete()
-        policy_new_pic.delete()
-        officer.delete()
-        product.delete()
-        photo_newpic.delete()
-        photo_oldpic.delete()
-        insuree_oldpic.delete()
-        family_oldpic.delete()
-        insuree_newpic.delete()
-        family_newpic.delete()
