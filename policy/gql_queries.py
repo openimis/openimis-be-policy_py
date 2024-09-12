@@ -11,7 +11,7 @@ from django.core.exceptions import PermissionDenied
 
 class PolicyGQLType(DjangoObjectType):
     sum_premiums = graphene.Float(source="sum_premiums")
-
+    
     def resolve_family(self, info):
         if not info.context.user.has_perms(PolicyConfig.gql_query_policies_perms):
             raise PermissionDenied(_("unauthorized"))
@@ -37,7 +37,7 @@ class PolicyGQLType(DjangoObjectType):
             "effective_date": ["exact", "lt", "lte", "gt", "gte"],
             "expiry_date": ["exact", "lt", "lte", "gt", "gte"],
             "stage": ["exact"],
-            "status":  ["exact", "lt", "lte", "gt", "gte"],
+            "status": ["exact", "lt", "lte", "gt", "gte"],
             "value": ["exact", "lt", "lte", "gt", "gte"],
             **prefix_filterset("product__", ProductGQLType._meta.filter_fields),
             **prefix_filterset("officer__", OfficerGQLType._meta.filter_fields),
@@ -83,6 +83,8 @@ class PolicyByFamilyOrInsureeGQLType(graphene.ObjectType):
     validity_from = graphene.Date()
     validity_to = graphene.Date()
     max_installments = graphene.Int()
+    contribution_plan_code = graphene.String()
+    contribution_plan_name = graphene.String()
 
 
 class PolicyByFamilyOrInsureeConnection(ExtendedRelayConnection):

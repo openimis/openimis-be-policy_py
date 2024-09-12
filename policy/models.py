@@ -2,13 +2,16 @@ import uuid
 
 from core import fields
 from core import models as core_models
+from core.utils import filter_validity
 from core.models import Officer
+
 from django.conf import settings
 from django.db import models
 from graphql import ResolveInfo
 from insuree.models import Family
 from product.models import Product
-
+from contribution_plan.models import ContributionPlan
+from django.utils import timezone as django_tz
 
 class Policy(core_models.VersionedModel):
     id = models.AutoField(db_column='PolicyID', primary_key=True)
@@ -30,17 +33,23 @@ class Policy(core_models.VersionedModel):
 
     offline = models.BooleanField(db_column='isOffline', blank=True, null=True)
     audit_user_id = models.IntegerField(db_column='AuditUserID')
+    contribution_plan = models.ForeignKey(ContributionPlan, models.DO_NOTHING,
+                                db_column='ContributionPlanID', related_name="contribution_plans",
+                                blank=True, null=True,)
+    creation_date = models.DateField(db_column='creationDate', default=django_tz.now, blank=True, null=True)
     # row_id = models.BinaryField(db_column='RowID', blank=True, null=True)
 
-    def sum_premiums(self, photo=False):
-        return sum(
-            [
-                p.amount
-                for p in self.premiums.filter(
-                    is_photo_fee=photo, validity_to__isnull=True
-                ).all()
-            ]
-        )
+    @staticmethod
+    def get_query_sum_premium(photo=False):
+        return models.Sum(
+            'premiums__amount', 
+            filter=models.Q(*filter_validity(prefix='premiums__'),premiums__is_photo_fee=photo)
+            )
+    
+    def sum_premiums(self, photo = False):
+        return Policy.objects.filter(id=self.id).aggregate(
+                sum_premiums=Policy.get_query_sum_premium(photo)
+                )['sum_premiums'] or 0
 
     def claim_ded_rems(self):
         return self.claim_ded_rems
@@ -50,7 +59,6 @@ class Policy(core_models.VersionedModel):
 
     def can_add_insuree(self):
         return self.family.members.filter(validity_to__isnull=True).count() < self.product.max_members
-
     class Meta:
         managed = True
         db_table = 'tblPolicy'
@@ -79,6 +87,7 @@ class Policy(core_models.VersionedModel):
         #     return queryset.filter(
         #         health_facility__location_id__in=[l.location.id for l in dist]
         #     )
+        
         return queryset
 
 

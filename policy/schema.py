@@ -26,6 +26,7 @@ from .gql_queries import *  # lgtm [py/polluting-import]
 from .gql_mutations import *  # lgtm [py/polluting-import]
 
 from .values import policy_values
+from contribution_plan.models import ContributionPlan
 
 
 class Query(graphene.ObjectType):
@@ -34,8 +35,9 @@ class Query(graphene.ObjectType):
         prev_uuid=graphene.String(required=False),
         stage=graphene.String(required=True),
         enrollDate=graphene.DateTime(required=True),
-        product_id=graphene.Int(required=True),
-        family_id=graphene.Int(required=True)
+        product_id=graphene.Int(required=False),
+        family_id=graphene.Int(required=True),
+        contribution_plan_uuid=graphene.UUID(required=False)
     )
     policies = OrderedDjangoFilterConnectionField(
         PolicyGQLType,
@@ -45,6 +47,7 @@ class Query(graphene.ObjectType):
         balance_gte=graphene.Float(),
         showHistory=graphene.Boolean(),
         showInactive=graphene.Boolean(),
+        confirmationType=graphene.String(),
         orderBy=graphene.List(of_type=graphene.String),
     )
 
@@ -58,6 +61,7 @@ class Query(graphene.ObjectType):
         active_or_last_expired_only=graphene.Boolean(),
         show_history=graphene.Boolean(),
         order_by=graphene.String(),
+        target_date=graphene.Date(),
     )
     policies_by_family = graphene.relay.ConnectionField(
         PolicyByFamilyOrInsureeConnection,
@@ -65,6 +69,7 @@ class Query(graphene.ObjectType):
         active_or_last_expired_only=graphene.Boolean(),
         show_history=graphene.Boolean(),
         order_by=graphene.String(),
+        target_date=graphene.Date(),
     )
     # TODO: refactoring
     # Eligibility is calculated for a Policy... which is bound to a Family (not an Insuree)
@@ -106,21 +111,38 @@ class Query(graphene.ObjectType):
     def resolve_policy_values(self, info, **kwargs):
         if not info.context.user.has_perms(PolicyConfig.gql_query_policies_perms):
             raise PermissionDenied(_("unauthorized"))
+        cp_uuid = None
+        product_id = None
+        if 'contribution_plan_uuid' in kwargs:
+            cp_uuid = str(kwargs.get('contribution_plan_uuid'))
+            contribution_plan = ContributionPlan.objects.filter(uuid=cp_uuid).first()
+            if not contribution_plan:
+                raise ValueError(f"Contribution plan {cp_uuid} not found")
+            
+            if not contribution_plan.benefit_plan_type.name == 'product':
+                raise ValueError(f"Contribution plan {cp_uuid} is not attached to a product")
+            product_id = contribution_plan.benefit_plan
+        elif 'product_id' in kwargs:
+            product_id = kwargs.get('product_id') 
+        else:
+           raise ValueError("Product or contribution plan is mandatory") 
 
-        product = Product.objects.filter(
-            Q(validity_to__isnull=True),
-            Q(id=kwargs.get('product_id')) | Q(legacy_id=kwargs.get('product_id')),
-            Q(validity_from__date__lte=kwargs.get('enrollDate')),
-        ).order_by('-validity_from').first()
-
+        product = None
+        if product_id:
+            product = Product.objects.filter(
+                Q(validity_to__isnull=True),
+                Q(id=product_id) | Q(legacy_id=product_id),
+                Q(validity_from__date__lte=kwargs.get('enrollDate')) | Q(date_from__lte=kwargs.get('enrollDate')),
+            ).order_by('-validity_from').first()
+            
         if not product:
-            raise ValidationError('Provided product not available')
-
+            raise ValueError(f"product {product_id} not found")
         policy = PolicyGQLType(
             stage=kwargs.get('stage'),
             enroll_date=kwargs.get('enrollDate'),
             start_date=kwargs.get('enrollDate'),
             product=product,
+            contribution_plan=cp_uuid
         )
         prefetch = Prefetch(
             'members',
@@ -133,7 +155,7 @@ class Query(graphene.ObjectType):
         prev_policy = None
         if 'prev_uuid' in kwargs:
             prev_policy = Policy.objects.get(uuid=kwargs.get('prev_uuid'))
-        policy, warnings = policy_values(policy, family, prev_policy)
+        policy, warnings = policy_values(policy, family, prev_policy, info.context.user)
         return PolicyAndWarningsGQLType(policy=policy, warnings=warnings)
 
     def resolve_policies(self, info, **kwargs):
@@ -154,17 +176,19 @@ class Query(graphene.ObjectType):
                     'm_count')) - Subquery(covered_sq.values('i_count'))
             )
             query = query.filter(inactive_count__gt=0)
+        if kwargs.get('balance_lte') or kwargs.get('balance_gte') or kwargs.get('sum_premiums', False):
+            query=query.annotate(
+                sum_premiums=Policy.get_query_sum_premium()
+                )
         if kwargs.get('balance_lte') or kwargs.get('balance_gte'):
-            sum_premiums = Premium.objects.filter(is_photo_fee=False).values(
-                'policy_id').annotate(sum=Sum('amount'))
-            sum_premiums_subquery = sum_premiums.filter(
-                policy_id=OuterRef('id'))
             query = query.annotate(
-                balance=F('value') - Subquery(sum_premiums_subquery.values('sum')))
+                balance=F('value') - F('sum_premiums'))
         if kwargs.get('balance_lte'):
             query = query.filter(balance__lte=kwargs.get('balance_lte'))
         if kwargs.get('balance_gte'):
             query = query.filter(balance__gte=kwargs.get('balance_gte'))
+        if kwargs.get('confirmationType'):
+            query = query.filter(family__confirmation_type=kwargs.get('confirmationType'))
         location_id = kwargs.get('district_id') if kwargs.get(
             'district_id') else kwargs.get('region_id')
         if location_id:
@@ -184,6 +208,8 @@ class Query(graphene.ObjectType):
             policy_value=item.policy_value,
             product_code=item.product_code,
             product_name=item.product_name,
+            contribution_plan_code=item.contribution_plan_code,
+            contribution_plan_name=item.contribution_plan_name,
             start_date=item.start_date,
             enroll_date=item.enroll_date,
             effective_date=item.effective_date,
@@ -212,7 +238,8 @@ class Query(graphene.ObjectType):
             active_or_last_expired_only=kwargs.get(
                 'active_or_last_expired_only', False),
             show_history=kwargs.get('show_history', False),
-            order_by=kwargs.get('order_by', None)
+            order_by=kwargs.get('order_by', None),
+            target_date=kwargs.get('target_date', None)
         )
         res = ByInsureeService(user=info.context.user).request(req)
         return [Query._to_policy_by_family_or_insuree_item(x) for x in res.items]
@@ -225,7 +252,8 @@ class Query(graphene.ObjectType):
             active_or_last_expired_only=kwargs.get(
                 'active_or_last_expired_only', False),
             show_history=kwargs.get('show_history', False),
-            order_by=kwargs.get('order_by', None)
+            order_by=kwargs.get('order_by', None),
+            target_date=kwargs.get('target_date', None)
         )
         res = ByFamilyService(user=info.context.user).request(req)
         return [Query._to_policy_by_family_or_insuree_item(x) for x in res.items]

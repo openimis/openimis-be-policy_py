@@ -5,20 +5,21 @@ from datetime import datetime as py_datetime, date as py_date
 import core
 from claim.models import ClaimService, Claim, ClaimItem
 from django import dispatch
-from django.core.exceptions import PermissionDenied
+from django.core.exceptions import PermissionDenied, ValidationError
 from django.db import connection
-from django.db.models import Q, Count, Min, Max, Value
-from django.db.models import Sum, F, Case, When
+from django.db.models import Q, Count, Min, Max, Sum, F
 from django.db.models.functions import Coalesce
 from django.template import Template, Context
 from django.utils.translation import gettext as _
 from graphene.utils.str_converters import to_snake_case
+
+from policy.utils import get_queryset_valid_at_date
 from core.signals import register_service_signal
 from insuree.models import Insuree, Family, InsureePolicy
 from insuree.services import create_insuree_renewal_detail
 from medical.models import Service, Item
 from policy.apps import PolicyConfig
-from policy.utils import MonthsAdd
+from policy.utils import MonthsAdd, get_members
 
 from .models import Policy, PolicyRenewal
 
@@ -61,8 +62,12 @@ class PolicyService:
         self.user = user
 
     @register_service_signal('policy_service.create_or_update')
-    def update_or_create(self, data, user):
+    def update_or_create(self, data, user): 
+        if isinstance(data['enroll_date'], str):
+            data['enroll_date'] = py_datetime.strptime(data['enroll_date'], "%Y-%m-%d").date()
         policy_uuid = data.get('uuid', None)
+        if 'enroll_date' in data and data['enroll_date'] > py_date.today():
+            raise ValidationError("policy.enroll_date_in_the_future")
         if policy_uuid:
             return self.update_policy(data, user)
         else:
@@ -70,23 +75,63 @@ class PolicyService:
 
     @register_service_signal('policy_service.update')
     def update_policy(self, data, user):
+        if "is_paid" in data:
+            data.pop("is_paid")
+        members = None
+        if "members_uuid" in data:
+            members_uuid = data.pop("members_uuid", None)
+            members = Insuree.objects.filter(uuid__in=members_uuid) if members_uuid else None
         data = self._clean_mutation_info(data)
         policy_uuid = data.pop('uuid') if 'uuid' in data else None
         policy = Policy.objects.get(uuid=policy_uuid)
+        members = get_members(policy, policy.family, user, members)
         policy.save_history()
         reset_policy_before_update(policy)
         [setattr(policy, key, data[key]) for key in data]
         policy.save()
-        update_insuree_policies(policy, user.id_for_audit)
+        update_insuree_policies(policy, user, members=members)
         return policy
 
     @register_service_signal('policy_service.create')
     def create_policy(self, data, user):
+        is_paid = data.pop("is_paid", False)
+        receipt = data.pop("receipt", None)
+        members = None
+        if "members_uuid" in data:
+            members_uuid = data.pop("members_uuid", None)
+            members = Insuree.objects.filter(uuid__in=members_uuid) if members_uuid else None
+        payer_uuid = data.pop("payer_uuid", None)
         data = self._clean_mutation_info(data)
         policy = Policy.objects.create(**data)
+        if receipt is not None:
+            from contribution.services import check_unique_premium_receipt_code_within_product
+            is_invalid = check_unique_premium_receipt_code_within_product(code=receipt, policy_uuid=policy.uuid)
+            if is_invalid:
+                raise ValidationError("Receipt already exist for a given product.")
+        else:
+            receipt = self.generate_contribution_receipt(policy.product, policy.enroll_date)
         policy.save()
-        update_insuree_policies(policy, user.id_for_audit)
+        update_insuree_policies(policy, user, members=members)
+        if is_paid:
+            from contribution.gql_mutations import premium_action
+            premium_data = {"policy_uuid": policy.uuid, "amount": policy.value,
+                            "receipt": receipt, "pay_date": data["enroll_date"], "pay_type": "C"}
+            if payer_uuid is not None:
+                premium_data["payer_uuid"] = payer_uuid
+            premium_action(premium_data, user)
         return policy
+
+    def generate_contribution_receipt(self, product, enroll_date):
+        from contribution.models import Premium
+        code_length = PolicyConfig.contribution_receipt_length
+        if not code_length and type(code_length) is not int:
+            raise ValueError("Invalid config for `generate_contribution_receipt`, expected `code_length` value.")
+        prefix = "RE-" + str(product.code) + "-" + str(enroll_date) + "-"
+        last_contribution = Premium.objects.filter(validity_to__isnull=True, receipt__icontains=prefix)
+        code = 0
+        if last_contribution:
+            code = int(last_contribution.latest('receipt').receipt[-code_length:])
+        return prefix + str(code + 1).zfill(code_length)
 
     def _clean_mutation_info(self, data):
         if "client_mutation_id" in data:
@@ -129,11 +174,12 @@ class PolicyService:
 @core.comparable
 class ByInsureeRequest(object):
 
-    def __init__(self, chf_id, active_or_last_expired_only=False, show_history=False, order_by=None):
+    def __init__(self, chf_id, active_or_last_expired_only=False, show_history=False, order_by=None, target_date=None):
         self.chf_id = chf_id
         self.active_or_last_expired_only = active_or_last_expired_only
         self.show_history = show_history
         self.order_by = order_by
+        self.target_date = target_date
 
     def __eq__(self, other):
         return isinstance(other, self.__class__) and self.__dict__ == other.__dict__
@@ -164,7 +210,9 @@ class ByFamilyOrInsureeResponseItem(object):
                  balance,
                  validity_from,
                  validity_to,
-                 max_installments
+                 max_installments,
+                 contribution_plan_code=None,
+                 contribution_plan_name=None
                  ):
         self.policy_id = policy_id
         self.policy_uuid = policy_uuid
@@ -188,6 +236,8 @@ class ByFamilyOrInsureeResponseItem(object):
         self.validity_from = validity_from
         self.validity_to = validity_to
         self.max_installments = max_installments
+        self.contribution_plan_code = contribution_plan_code
+        self.contribution_plan_name = contribution_plan_name
 
     def __eq__(self, other):
         return isinstance(other, self.__class__) and self.__dict__ == other.__dict__
@@ -228,35 +278,41 @@ class FilteredPoliciesService(object):
                 ceiling_op = row.product.max_op_insuree - (row.total_rem_op if row.total_rem_op else 0)
 
         members_count = row.family.members.count()
-        threshold = row.product.threshold
+        threshold = row.product.threshold if row.product.threshold else 0
         total_rem_g = row.total_rem_g if row.total_rem_g else 0
         total_rem_ip = row.total_rem_ip if row.total_rem_ip else 0
         total_rem_op = row.total_rem_op if row.total_rem_op else 0
+        extra_member = row.product.max_policy_extra_member if row.product.max_policy_extra_member else 0
+        extra_member_ip = row.product.max_policy_extra_member_ip if row.product.max_policy_extra_member_ip else 0
+        extra_member_op = row.product.max_policy_extra_member_op if row.product.max_policy_extra_member_op else 0
+
 
         if row.product.max_policy:
             max_policy = row.product.max_policy
             if members_count > threshold:
-                max_policy += (members_count - threshold) * row.product.max_policy_extra_member
+                max_policy += (members_count - threshold) * extra_member
             ceiling = max_policy - total_rem_g
         else:
             ceiling_ip = 0
             if row.product.max_ip_policy:
                 max_ip_policy = row.product.max_ip_policy
                 if members_count > threshold:
-                    max_ip_policy += (members_count - threshold) * row.product.max_policy_extra_member_ip
+                    max_ip_policy += (members_count - threshold) * extra_member_ip
                 ceiling_ip = max_ip_policy - total_rem_ip
 
             ceiling_op = 0
             if row.product.max_op_policy:
                 max_op_policy = row.product.max_op_policy
                 if members_count > threshold:
-                    max_op_policy += (members_count - threshold) * row.product.max_policy_extra_member_op
+                    max_op_policy += (members_count - threshold) * extra_member_op
                 ceiling_op = max_op_policy - total_rem_op
 
         balance = row.value
         if row.total_ded_g:
             balance -= row.total_ded_g
 
+        contribution_plan_code = row.contribution_plan.code if row.contribution_plan else None
+        contribution_plan_name = row.contribution_plan.name if row.contribution_plan else None
         return ByFamilyOrInsureeResponseItem(
             policy_id=row.id,
             policy_uuid=row.uuid,
@@ -280,14 +336,15 @@ class FilteredPoliciesService(object):
             validity_from=row.validity_from,
             validity_to=row.validity_to,
             max_installments=row.product.max_installments,
+            contribution_plan_code=contribution_plan_code,
+            contribution_plan_name=contribution_plan_name,
         )
 
     def build_query(self, req):
         # TODO: prevent direct dependency on claim_ded structure?
-        res = Policy.objects \
-            .select_related('product') \
-            .select_related('officer') \
-            .prefetch_related('claim_ded_rems') \
+        res = Policy.objects\
+            .prefetch_related('product') \
+            .prefetch_related('officer') \
             .annotate(total_ded_g=Sum('claim_ded_rems__ded_g')) \
             .annotate(total_ded_ip=Sum('claim_ded_rems__ded_ip')) \
             .annotate(total_ded_op=Sum('claim_ded_rems__ded_op')) \
@@ -299,8 +356,14 @@ class FilteredPoliciesService(object):
             .annotate(total_rem_delivery=Sum('claim_ded_rems__rem_delivery')) \
             .annotate(total_rem_hospitalization=Sum('claim_ded_rems__rem_hospitalization')) \
             .annotate(total_rem_antenatal=Sum('claim_ded_rems__rem_antenatal'))
+        res.query.group_by = ['id']
+        if hasattr(req, 'chf_id'):
+            res= res.filter(insuree_policies__insuree__chf_id = req.chf_id)
         if not req.show_history:
-            res = res.filter(*core.filter_validity())
+            if req.target_date: 
+                res = res.filter(*core.filter_validity(), expiry_date__gt = req.target_date, effective_date__lte = req.target_date)
+            else:
+                res = res.filter(*core.filter_validity())
         if req.active_or_last_expired_only:
             # sort on status, so that any active policy (status = 2) pops up...
             res = res.annotate(not_null_expiry_date=Coalesce('expiry_date', py_date.max)) \
@@ -314,23 +377,17 @@ class ByInsureeService(FilteredPoliciesService):
         super(ByInsureeService, self).__init__(user)
 
     def request(self, by_insuree_request):
-        insurees = Insuree.objects.filter(
-            chf_id=by_insuree_request.chf_id,
-            *core.filter_validity() if not by_insuree_request.show_history else []
-        )
         res = self.build_query(by_insuree_request)
-        res = res.prefetch_related('insuree_policies')
-        res = res.filter(insuree_policies__insuree__in=insurees)
-        # .distinct('product__code') >> DISTINCT ON fields not supported by MS-SQL
+        res = res.filter(insuree_policies__insuree__chf_id=by_insuree_request.chf_id)
         if by_insuree_request.active_or_last_expired_only:
             products = {}
-            for r in res:
-                if r.product.code not in products.keys():
-                    products[r.product.code] = r
+            for policy in res:
+                if policy.status == Policy.STATUS_IDLE or policy.status == Policy.STATUS_READY:
+                    products['policy.product.code-%s' % policy.uuid] = policy
+                elif policy.product.code not in products.keys():
+                    products[policy.product.code] = policy
             res = products.values()
-        items = tuple(
-            map(lambda x: FilteredPoliciesService._to_item(x), res)
-        )
+        items = [FilteredPoliciesService._to_item(x) for x in res]
         # possible improvement: sort via the ORM
         # ... but beware of the active_or_last_expired_only filtering!
         order_attr = to_snake_case(by_insuree_request.order_by if by_insuree_request.order_by else "expiry_date")
@@ -348,11 +405,12 @@ class ByInsureeService(FilteredPoliciesService):
 @core.comparable
 class ByFamilyRequest(object):
 
-    def __init__(self, family_uuid, active_or_last_expired_only=False, show_history=False, order_by=None):
+    def __init__(self, family_uuid, active_or_last_expired_only=False, show_history=False, order_by=None, target_date=None):
         self.family_uuid = family_uuid
         self.active_or_last_expired_only = active_or_last_expired_only
         self.show_history = show_history
         self.order_by = order_by
+        self.target_date = target_date
 
     def __eq__(self, other):
         return isinstance(other, self.__class__) and self.__dict__ == other.__dict__
@@ -374,9 +432,8 @@ class ByFamilyService(FilteredPoliciesService):
         super(ByFamilyService, self).__init__(user)
 
     def request(self, by_family_request):
-        family = Family.objects.get(uuid=by_family_request.family_uuid)
         res = self.build_query(by_family_request)
-        res = res.filter(family_id=family.id)
+        res = res.filter(family__uuid=by_family_request.family_uuid)
         # .distinct('product__code') >> DISTINCT ON fields not supported by MS-SQL
         if by_family_request.active_or_last_expired_only:
             products = {}
@@ -480,8 +537,8 @@ class EligibilityResponse(object):
         return self.__str__()
 
 
-signal_eligibility_service_before = dispatch.Signal(providing_args=["user", "request", "response"])
-signal_eligibility_service_after = dispatch.Signal(providing_args=["user", "request", "response"])
+signal_eligibility_service_before = dispatch.Signal(["user", "request", "response"])
+signal_eligibility_service_after = dispatch.Signal(["user", "request", "response"])
 
 
 class EligibilityService(object):
@@ -616,7 +673,7 @@ class NativeEligibilityService(object):
                     "policy__product_id",
                     waiting_period=F(waiting_period_field),
                     limit_no=F(limit_field)) \
-            .annotate(min_date=MonthsAdd(Coalesce(F(waiting_period_field), 0), "effective_date")) \
+            .annotate(min_date=MonthsAdd("effective_date", Coalesce(F(waiting_period_field), 0))) \
             .annotate(count=Sum(Coalesce(
                                 f"insuree__claim__{item_or_service}s__qty_approved",
                                 f'insuree__claim__{item_or_service}s__qty_provided'
@@ -632,7 +689,7 @@ class NativeEligibilityService(object):
                                                    if min_date_qs["min_date_lte"]
                                                    else min_date_qs["min_date_all"])
 
-        if queryset_item_or_service.filter(min_date__lte=now).filter(left__isnull=True).first():
+        if queryset_item_or_service.filter(min_date__lte=now).filter(left__isnull=True).order_by('-validity_from').first():
             items_or_services_left = None
         else:
             items_or_services_left = queryset_item_or_service\
@@ -719,6 +776,7 @@ class NativeEligibilityService(object):
                                                   filter=get_total_filter(Service.CATEGORY_VISIT),
                                                   distinct=True), 0)) \
             .annotate(total_visits_left=F("policy__product__max_no_visits") - F("total_visits")) \
+            .order_by('-expiry_date')\
             .first()
 
         if result is None:
@@ -1001,8 +1059,9 @@ HOF{% endif %}
     return sms_queue
 
 
-def update_insuree_policies(policy, audit_user_id):
-    for member in policy.family.members.filter(validity_to__isnull=True):
+def update_insuree_policies(policy, user, members=None):
+    members = get_members(policy, policy.family, user, members)
+    for member in members:
         existing_ip = InsureePolicy.objects.filter(validity_to__isnull=True, insuree=member, policy=policy).first()
         if existing_ip:
             existing_ip.save_history()
@@ -1014,7 +1073,7 @@ def update_insuree_policies(policy, audit_user_id):
                 effective_date=policy.effective_date,
                 expiry_date=policy.expiry_date,
                 offline=policy.offline,
-                audit_user_id=audit_user_id
+                audit_user_id=user.id_for_audit if hasattr(user, 'audit_user_id') else user
             )
         )
         if ip_created:
