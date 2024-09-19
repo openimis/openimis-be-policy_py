@@ -135,6 +135,14 @@ class PolicyService:
             }
 
     def set_deleted(self, policy):
+        
+        if policy.claim_ded_rems:
+            return {
+                'title': policy.uuid,
+                'list': [{
+                    'message': _("policy.mutation.policy_is_used_in_claims") % {'policy': str(policy)},
+                    'detail': policy.uuid}]
+            }
         try:
             insuree_policies = InsureePolicy.objects.filter(policy=policy)
             for insuree_policy in insuree_policies:

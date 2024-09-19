@@ -174,11 +174,8 @@ class EligibilityServiceTestCase(TestCase):
         native_response = native_el_svc.request(req, EligibilityResponse(req))
         self.assertIsNotNone(native_response)
         self.assertEquals(native_response, expected_resposnse)
-
-
+        
     def test_eligibility_item(self):
-        if not connection.vendor == "mssql":
-            self.skipTest("This test can only be executed for MSSQL database")
         insuree, family = create_test_insuree_for_policy()
         product = create_test_product("ELI1")
         (policy, insuree_policy) = create_test_policy2(product, insuree)
@@ -224,8 +221,6 @@ class EligibilityServiceTestCase(TestCase):
 
 
     def test_eligibility_by_insuree(self):
-        if not connection.vendor == "mssql":
-            self.skipTest("This test can only be executed for MSSQL database")
         insuree, family = create_test_insuree_for_policy()
         product = create_test_product("ELI1")
         (policy, insuree_policy) = create_test_policy2(product, insuree)
@@ -268,6 +263,9 @@ class EligibilityServiceTestCase(TestCase):
         native_response = native_el_svc.request(req, native_response)
         self.assertIsNotNone(native_response)
         self.assertEquals(native_response, expected_resposnse)
+        result = PolicyService(self.user).set_deleted(policy)
+        self.assertNotEquals(result, [], "the policy cannot be deleted as it has some DedRem on it")
+
 
 
 
