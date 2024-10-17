@@ -130,7 +130,7 @@ class PolicyGraphQLTestCase(openIMISGraphQLTestCase):
     def test_query_not_insured_family_member(self):
         response = self.query(
             """
-    
+
             query policiesByInsuree($chfid: String!) {
                 policiesByInsuree(chfId:$chfid)
                 {
@@ -162,7 +162,7 @@ class PolicyGraphQLTestCase(openIMISGraphQLTestCase):
     def test_query_with_variables(self):
         response = self.query(
             """
-    
+
             query policiesByInsuree($chfid: String!) {
                 policiesByInsuree(chfId:$chfid)
                 {
@@ -194,7 +194,7 @@ class PolicyGraphQLTestCase(openIMISGraphQLTestCase):
     def test_query_with_variables_2(self):
         response = self.query(
             """
-    
+
             query policiesByInsuree($chfid: String!, $activeOrLastExpiredOnly: Boolean!) {
                 policiesByInsuree(chfId:$chfid, activeOrLastExpiredOnly:$activeOrLastExpiredOnly)
                 {
@@ -229,7 +229,7 @@ class PolicyGraphQLTestCase(openIMISGraphQLTestCase):
     def test_query_with_variables_3(self):
         response = self.query(
             """
-    
+
             query policiesByInsuree($chfid: String!, $targetDate:  Date! ) {
                 policiesByInsuree(chfId:$chfid ,targetDate: $targetDate)
                 {
@@ -278,9 +278,9 @@ class PolicyGraphQLTestCase(openIMISGraphQLTestCase):
                         {
                             policyUuid,productCode,productName,officerCode,officerName,enrollDate,effectiveDate,startDate,expiryDate,status,policyValue,balance,ded,dedInPatient,dedOutPatient,ceiling,ceilingInPatient,ceilingOutPatient
                         }
-                    }   
+                    }
                 }
-            } 
+            }
             """,
             headers={"HTTP_AUTHORIZATION": f"Bearer {self.admin_token}"},
             variables={
@@ -348,7 +348,7 @@ class PolicyGraphQLTestCase(openIMISGraphQLTestCase):
         input: {{
           clientMutationId: "{muuid}"
           clientMutationLabel: "Création de la police ttttt eeeee (123123123) - 2024-06-01 : 2025-05-31"
-          
+
           enrollDate: "2024-04-07"
             startDate: "2024-06-01"
             expiryDate: "2025-05-31"
@@ -373,8 +373,12 @@ class PolicyGraphQLTestCase(openIMISGraphQLTestCase):
         response = self.query(
             f"""
                 {{
-                policyValues(stage: "R",enrollDate: "2019-09-26T00:00:00",productId: {self.product.id},familyId: {self.insuree.family.id})
-                {{
+                policyValues(
+                    stage: "R",
+                    enrollDate: "2019-09-26T00:00:00",
+                    productId: {self.product.id},
+                    familyId: {self.insuree.family.id}
+                ){{
                     policy{{startDate expiryDate value}},warnings
                 }}
                 }} """,

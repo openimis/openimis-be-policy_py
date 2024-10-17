@@ -864,6 +864,17 @@ class NativeEligibilityService(object):
         return item_or_service_obj, min_date_item, items_or_services_left
 
     def request(self, req, response):
+        def get_total_filter(category):
+            return Q(
+                insuree__claim__status__gt=Claim.STATUS_ENTERED,
+                insuree__claim__category=category,
+                *core.filter_validity(prefix="insuree__"),
+                *core.filter_validity(prefix="insuree__claim__"),
+                *core.filter_validity(prefix="insuree__claim__services__"),
+            ) & (  # Not sure this one is necessary
+                Q(insuree__claim__services__rejection_reason=0)
+                | Q(insuree__claim__services__rejection_reason__isnull=True)
+            )
         insuree = Insuree.get_queryset(None, self.user).get(
             chf_id=req.chf_id, *core.filter_validity()
         )  # Will throw an exception if not found
@@ -891,18 +902,6 @@ class NativeEligibilityService(object):
             min_date_item = None
         eligibility.min_date_item = min_date_item
         eligibility.item_left = items_left
-
-        def get_total_filter(category):
-            return Q(
-                insuree__claim__status__gt=Claim.STATUS_ENTERED,
-                insuree__claim__category=category,
-                *core.filter_validity(prefix="insuree__"),
-                *core.filter_validity(prefix="insuree__claim__"),
-                *core.filter_validity(prefix="insuree__claim__services__"),
-            ) & (  # Not sure this one is necessary
-                Q(insuree__claim__services__rejection_reason=0)
-                | Q(insuree__claim__services__rejection_reason__isnull=True)
-            )
 
         # InsPol -> Policy -> Product -> dedrem
         result = cache.get(
@@ -1365,9 +1364,6 @@ HOF{% endif %}
                     )
                 )
             )
-            # new_family_message = "" # REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(@FamilyMessage, '@@InsuranceID', @CHFID), '@@LastName', @InsLastName),
-            # '@@OtherNames', @InsOtherNames), '@@ProductCode', @ProductCode), '@@ProductName', @ProductName),
-            # '@@ExpiryDate', FORMAT(@ExpiryDate,'dd MMM yyyy'))
 
             if new_family_message:
                 sms_queue.append(

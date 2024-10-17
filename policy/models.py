@@ -212,7 +212,7 @@ if "claim" in sys.modules:
 @receiver(post_save, sender=Product)
 @receiver(post_delete, sender=Product)
 def clean_all_enquire_cache_product(sender, instance, *args, **kwagrs):
-    cache.delete(f"eligibility_*")
+    cache.delete("eligibility_*")
 
 
 @receiver(post_save, sender=Policy)
