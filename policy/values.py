@@ -198,12 +198,22 @@ def set_value(policy, members, prev_policy, user):
     policy.value = Decimal(contributions + general_assembly + registration)
     discount(policy, prev_policy)
     # try to get policy value from calcrule
-    instance = ContributionPlan.objects.filter(
-        uuid=policy.contribution_plan
-    ).first() if policy.contribution_plan else None
-    policy_value = run_calculation_rules(
-        sender=instance.__class__.__name__, instance=instance, user=user, context="policy_value", family=family
-    ) if instance else None
+    instance = (
+        ContributionPlan.objects.filter(uuid=policy.contribution_plan).first()
+        if policy.contribution_plan
+        else None
+    )
+    policy_value = (
+        run_calculation_rules(
+            sender=instance.__class__.__name__,
+            instance=instance,
+            user=user,
+            context="policy_value",
+            family=policy.family,
+        )
+        if instance
+        else None
+    )
     # to allow 0 as policy value
     if policy_value is not None:
         policy.value = Decimal(policy_value)
