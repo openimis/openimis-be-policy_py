@@ -7,13 +7,18 @@ import django.utils.timezone
 class Migration(migrations.Migration):
 
     dependencies = [
-        ('policy', '0008_remove_policy_row_id_policy_contribution_plan'),
+        ("policy", "0008_remove_policy_row_id_policy_contribution_plan"),
     ]
 
     operations = [
         migrations.AddField(
-            model_name='policy',
-            name='creation_date',
-            field=models.DateField(blank=True, default=django.utils.timezone.now, db_column='creationDate', null=True),
+            model_name="policy",
+            name="creation_date",
+            field=models.DateField(
+                blank=True,
+                default=django.utils.timezone.now,
+                db_column="creationDate",
+                null=True,
+            ),
         ),
     ]

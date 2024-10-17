@@ -1,11 +1,11 @@
 from datetime import datetime, timedelta
 
 from dateutil.relativedelta import relativedelta
-from django.conf import settings
 from django.db import connection
 
 from tools.utils import dictfetchall
 import logging
+
 logger = logging.getLogger(__name__)
 
 # If manually pasting from ReportBro and you have test data, search and replace \" with \\"
@@ -4197,97 +4197,97 @@ END
 policies_primary_indicators_sql = f"""
     SELECT prod."ProdID" as "ProdID", prod."ProductCode" as "ProductCode",
         COUNT(ins."InsureeID") FILTER (
-            WHERE Ins."Gender" = 'M'     
+            WHERE Ins."Gender" = 'M'
             AND pl."PolicyStatus" > 1
             AND pl."EffectiveDate" <= %(LastDay)s
             AND pl."ExpiryDate" > %(LastDay)s
         ) AS "TotalMaleInsurees",
         COUNT(ins."InsureeID") FILTER (
-            WHERE Ins."Gender" = 'F'     
+            WHERE Ins."Gender" = 'F'
             AND pl."PolicyStatus" > 1
             AND pl."EffectiveDate" <= %(LastDay)s
             AND pl."ExpiryDate" > %(LastDay)s
         ) AS "TotalFemaleInsurees",
         COUNT(ins."InsureeID") FILTER (
-            WHERE Ins."Gender" = 'O'     
+            WHERE Ins."Gender" = 'O'
             AND pl."PolicyStatus" > 1
             AND pl."EffectiveDate" <= %(LastDay)s
             AND pl."ExpiryDate" > %(LastDay)s
         ) AS "TotalOtherInsurees",
         COUNT(ins."InsureeID") FILTER (
-            WHERE Ins."Gender" = 'M'     
+            WHERE Ins."Gender" = 'M'
             AND pl."PolicyStatus" > 1
             AND pl."PolicyStage" = 'N'
             AND YEAR(pl."EffectiveDate") = YEAR(%(LastDay)s)
             AND MONTH(pl."EffectiveDate") = MONTH(%(LastDay)s)
         ) AS "NewMaleInsurees",
         COUNT(ins."InsureeID") FILTER (
-            WHERE Ins."Gender" = 'F'     
+            WHERE Ins."Gender" = 'F'
             AND pl."PolicyStatus" > 1
             AND pl."PolicyStage" = 'N'
             AND YEAR(pl."EffectiveDate") = YEAR(%(LastDay)s)
             AND MONTH(pl."EffectiveDate") = MONTH(%(LastDay)s)
         ) AS "NewFemaleInsurees",
         COUNT(ins."InsureeID") FILTER (
-            WHERE Ins."Gender" = 'O'     
+            WHERE Ins."Gender" = 'O'
             AND pl."PolicyStatus" > 1
             AND pl."PolicyStage" = 'N'
             AND YEAR(pl."EffectiveDate") = YEAR(%(LastDay)s)
             AND MONTH(pl."EffectiveDate") = MONTH(%(LastDay)s)
         ) AS "NewOtherInsurees",
         COUNT(ins."InsureeID") FILTER (
-            WHERE Ins."Gender" = 'M'     
+            WHERE Ins."Gender" = 'M'
             AND pl."PolicyStatus" > 1
             AND pl."PolicyStage" = 'R'
             AND YEAR(pl."EnrollDate") = YEAR(%(LastDay)s)
             AND MONTH(pl."EnrollDate") = MONTH(%(LastDay)s)
         ) AS "RenewMaleInsurees",
         COUNT(ins."InsureeID") FILTER (
-            WHERE Ins."Gender" = 'F'     
+            WHERE Ins."Gender" = 'F'
             AND pl."PolicyStatus" > 1
             AND pl."PolicyStage" = 'R'
             AND YEAR(pl."EnrollDate") = YEAR(%(LastDay)s)
             AND MONTH(pl."EnrollDate") = MONTH(%(LastDay)s)
         ) AS "RenewFemaleInsurees",
         COUNT(ins."InsureeID") FILTER (
-            WHERE Ins."Gender" = 'O'     
+            WHERE Ins."Gender" = 'O'
             AND pl."PolicyStatus" > 1
             AND pl."PolicyStage" = 'R'
             AND YEAR(pl."EnrollDate") = YEAR(%(LastDay)s)
             AND MONTH(pl."EnrollDate") = MONTH(%(LastDay)s)
         ) AS "RenewOtherInsurees",
         COUNT(ins."InsureeID") FILTER (
-            WHERE Ins."Gender" = 'M'     
+            WHERE Ins."Gender" = 'M'
             AND pl."PolicyStatus" = 4
             AND YEAR(pl."ValidityFrom") = YEAR(%(LastDay)s)
             AND MONTH(pl."ValidityFrom") = MONTH(%(LastDay)s)
         ) AS "SuspendedMaleInsurees",
         COUNT(ins."InsureeID") FILTER (
-            WHERE Ins."Gender" = 'F'     
+            WHERE Ins."Gender" = 'F'
             AND pl."PolicyStatus" = 4
             AND YEAR(pl."ValidityFrom") = YEAR(%(LastDay)s)
             AND MONTH(pl."ValidityFrom") = MONTH(%(LastDay)s)
         ) AS "SuspendedFemaleInsurees",
         COUNT(ins."InsureeID") FILTER (
-            WHERE Ins."Gender" = 'O'     
+            WHERE Ins."Gender" = 'O'
             AND pl."PolicyStatus" = 4
             AND YEAR(pl."ValidityFrom") = YEAR(%(LastDay)s)
             AND MONTH(pl."ValidityFrom") = MONTH(%(LastDay)s)
         ) AS "SuspendedOtherInsurees",
         COUNT(ins."InsureeID") FILTER (
-            WHERE Ins."Gender" = 'M'     
+            WHERE Ins."Gender" = 'M'
             AND pl."PolicyStatus" > 1
             AND YEAR(pl."ExpiryDate") = YEAR(%(LastDay)s)
             AND MONTH(pl."ExpiryDate") = MONTH(%(LastDay)s)
         ) AS "ExpiredMaleInsurees",
         COUNT(ins."InsureeID") FILTER (
-            WHERE Ins."Gender" = 'F'     
+            WHERE Ins."Gender" = 'F'
             AND pl."PolicyStatus" > 1
             AND YEAR(pl."ExpiryDate") = YEAR(%(LastDay)s)
             AND MONTH(pl."ExpiryDate") = MONTH(%(LastDay)s)
         ) AS "ExpiredFemaleInsurees",
         COUNT(ins."InsureeID") FILTER (
-            WHERE Ins."Gender" = 'O'     
+            WHERE Ins."Gender" = 'O'
             AND pl."PolicyStatus" > 1
             AND YEAR(pl."ExpiryDate") = YEAR(%(LastDay)s)
             AND MONTH(pl."ExpiryDate") = MONTH(%(LastDay)s)
@@ -4317,7 +4317,9 @@ policies_primary_indicators_sql = f"""
 """
 
 
-def policies_primary_indicators_query(user, yearMonth, locationId=0, prodId=0, **kwargs):
+def policies_primary_indicators_query(
+    user, yearMonth, locationId=0, prodId=0, **kwargs
+):
     first_day = datetime.strptime(yearMonth, "%Y-%m-%d").replace(day=1)
     last_day = first_day + relativedelta(months=1) - timedelta(days=1)
     days_in_month = last_day.day
@@ -4333,9 +4335,7 @@ def policies_primary_indicators_query(user, yearMonth, locationId=0, prodId=0, *
                     "DaysInMonth": days_in_month,
                 },
             )
-            return {
-                "data": dictfetchall(cur)
-            }
+            return {"data": dictfetchall(cur)}
         except Exception as e:
             logger.exception("Error fetching policies primary indicators query")
             raise e
