@@ -1,7 +1,6 @@
 from datetime import datetime, timedelta
 
 from dateutil.relativedelta import relativedelta
-from django.conf import settings
 from django.db import connection
 
 from tools.utils import dictfetchall

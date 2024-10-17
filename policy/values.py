@@ -1,12 +1,8 @@
 from django.utils.translation import gettext as _
-from django.db.models import Q, Count
 import datetime as py_datetime
 from decimal import Decimal
 from .models import Policy
 from calculation.services import run_calculation_rules
-from contract.models import (
-    ContractContributionPlanDetails as ContractContributionPlanDetailsModel,
-)
 from core.apps import CoreConfig
 from dateutil.relativedelta import relativedelta
 from contribution_plan.models import ContributionPlan

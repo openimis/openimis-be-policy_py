@@ -1,5 +1,4 @@
 from django.db.models import Func, DateTimeField
-from django.db.models.functions import Cast, Coalesce
 from calculation.services import run_calculation_rules
 from contribution_plan.models import ContributionPlan
 

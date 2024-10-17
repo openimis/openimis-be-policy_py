@@ -1,7 +1,7 @@
 from core.test_helpers import create_test_interactive_user
 from rest_framework import status
 from rest_framework.test import APITestCase
-from dataclasses import copy, dataclass
+from dataclasses import dataclass
 from graphql_jwt.shortcuts import get_token
 from core.models import User
 from django.conf import settings

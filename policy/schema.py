@@ -3,6 +3,7 @@ from core.schema import (
     OrderedDjangoFilterConnectionField,
     signal_mutation_module_validate,
 )
+from core.utils import filter_validity
 import graphene
 from django.core.exceptions import PermissionDenied
 from django.db.models import Prefetch
@@ -17,9 +18,8 @@ from graphene_django.filter import DjangoFilterConnectionField
 from core.models import Officer
 from .models import PolicyMutation, Policy
 from product.models import Product
-from contribution.models import Premium
 from insuree.models import Family, Insuree, InsureePolicy
-from django.db.models import OuterRef, Subquery, Sum, F, Count
+from django.db.models import OuterRef, Subquery, F, Count
 from location.apps import LocationConfig
 
 # We do need all queries and mutations in the namespace here.
@@ -30,7 +30,6 @@ from .gql_queries import (
     PolicyGQLType,
     OfficerGQLType,
     PolicyByFamilyOrInsureeConnection,
-    
 )  # lgtm [py/polluting-import]
 from .gql_mutations import (
     CreatePolicyMutation,

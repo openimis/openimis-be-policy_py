@@ -1,6 +1,5 @@
-from django.db.models import Q, Sum, F, QuerySet
+from django.db.models import Q, F, QuerySet
 
-from contribution.models import Premium
 from core.models import Officer
 from location.models import Location
 from policy.models import Policy

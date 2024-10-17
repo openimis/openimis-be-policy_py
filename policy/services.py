@@ -4,7 +4,7 @@ from datetime import datetime as py_datetime, date as py_date
 from django.core.cache import cache
 
 import core
-from claim.models import ClaimService, Claim, ClaimItem
+from claim.models import Claim, ClaimItem
 from django import dispatch
 from django.core.exceptions import PermissionDenied, ValidationError
 from django.db import connection
@@ -14,9 +14,8 @@ from django.template import Template, Context
 from django.utils.translation import gettext as _
 from graphene.utils.str_converters import to_snake_case
 
-from policy.utils import get_queryset_valid_at_date
 from core.signals import register_service_signal
-from insuree.models import Insuree, Family, InsureePolicy
+from insuree.models import Insuree, InsureePolicy
 from insuree.services import create_insuree_renewal_detail
 from medical.models import Service, Item
 from policy.apps import PolicyConfig

@@ -5,7 +5,6 @@ from .apps import PolicyConfig
 from .models import Policy
 from core import (
     prefix_filterset,
-    filter_validity,
     ExtendedConnection,
     ExtendedRelayConnection,
 )
