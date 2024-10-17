@@ -738,7 +738,7 @@ class NativeEligibilityService(object):
             )
 
         # InsPol -> Policy -> Product -> dedrem
-        result = cache.get(f'elegibility_{insuree.family_id or insuree.id}_{insuree.id}')
+        result = cache.get(f'eligibility_{insuree.family_id or insuree.id}_{insuree.id}')
         if not result:
             result = InsureePolicy.objects \
                 .filter(
@@ -816,7 +816,7 @@ class NativeEligibilityService(object):
                 ).order_by(
                     '-expiry_date'
                 ).first()
-            cache.set(f'elegibility_{insuree.family_id or insuree.id}_{insuree.id}', result, None)
+            cache.set(f'eligibility_{insuree.family_id or insuree.id}_{insuree.id}', result, None)
 
         if result is None:
             eligibility.total_admissions_left = 0

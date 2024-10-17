@@ -137,23 +137,23 @@ if 'claim' in sys.modules:
     from claim.models import Claim
     @receiver(post_save, sender=Claim)
     @receiver(post_delete, sender=Claim)
-    def clean_inquire_cache(sender, instance, *args, **kwagrs):
-        cache.delete(f'elegibility_{instance.insuree.family_id or instance.insuree.id}_*')
+    def clean_enquire_cache_claim(sender, instance, *args, **kwagrs):
+        cache.delete(f'eligibility_{instance.insuree.family_id or instance.insuree.id}_*')
 
 
 @receiver(post_save, sender=Product)
 @receiver(post_delete, sender=Product)
-def clean_all_inquire_cache(sender, instance, *args, **kwagrs):
-    cache.delete(f'elegibility_*')
+def clean_all_enquire_cache_product(sender, instance, *args, **kwagrs):
+    cache.delete(f'eligibility_*')
 
 
 @receiver(post_save, sender=Policy)
 @receiver(post_delete, sender=Policy)
-def clean_all_inquire_cache(sender, instance, *args, **kwagrs):
-    cache.delete(f'elegibility_{instance.family_id}_*')
+def clean_all_enquire_cache_policy(sender, instance, *args, **kwagrs):
+    cache.delete(f'eligibility_{instance.family_id}_*')
 
  
 @receiver(post_save, sender=Family)
 @receiver(post_delete, sender=Family)
-def clean_all_inquire_cache(sender, instance, *args, **kwagrs):
-    cache.delete(f'elegibility_{instance.id}_*')
+def clean_all_enquire_cache_family(sender, instance, *args, **kwagrs):
+    cache.delete(f'eligibility_{instance.id}_*')
