@@ -6,6 +6,7 @@ from django.db import connection
 
 from tools.utils import dictfetchall
 import logging
+
 logger = logging.getLogger(__name__)
 
 # If manually pasting from ReportBro and you have test data, search and replace \" with \\"
@@ -4317,7 +4318,9 @@ policies_primary_indicators_sql = f"""
 """
 
 
-def policies_primary_indicators_query(user, yearMonth, locationId=0, prodId=0, **kwargs):
+def policies_primary_indicators_query(
+    user, yearMonth, locationId=0, prodId=0, **kwargs
+):
     first_day = datetime.strptime(yearMonth, "%Y-%m-%d").replace(day=1)
     last_day = first_day + relativedelta(months=1) - timedelta(days=1)
     days_in_month = last_day.day
@@ -4333,9 +4336,7 @@ def policies_primary_indicators_query(user, yearMonth, locationId=0, prodId=0, *
                     "DaysInMonth": days_in_month,
                 },
             )
-            return {
-                "data": dictfetchall(cur)
-            }
+            return {"data": dictfetchall(cur)}
         except Exception as e:
             logger.exception("Error fetching policies primary indicators query")
             raise e

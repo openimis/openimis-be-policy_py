@@ -3,7 +3,12 @@ from graphene_django import DjangoObjectType
 from django.utils.translation import gettext as _
 from .apps import PolicyConfig
 from .models import Policy
-from core import prefix_filterset, filter_validity, ExtendedConnection, ExtendedRelayConnection
+from core import (
+    prefix_filterset,
+    filter_validity,
+    ExtendedConnection,
+    ExtendedRelayConnection,
+)
 from core.schema import OfficerGQLType
 from product.schema import ProductGQLType
 from django.core.exceptions import PermissionDenied
@@ -11,7 +16,7 @@ from django.core.exceptions import PermissionDenied
 
 class PolicyGQLType(DjangoObjectType):
     sum_premiums = graphene.Float(source="sum_premiums")
-    
+
     def resolve_family(self, info):
         if not info.context.user.has_perms(PolicyConfig.gql_query_policies_perms):
             raise PermissionDenied(_("unauthorized"))
@@ -104,4 +109,3 @@ class EligibilityGQLType(graphene.ObjectType):
     item_left = graphene.Int()
     is_item_ok = graphene.Boolean()
     is_service_ok = graphene.Boolean()
-
