@@ -1,9 +1,10 @@
 import uuid
-
+import sys
 from core import fields
 from core import models as core_models
 from core.utils import filter_validity
 from core.models import Officer
+from django.core.cache import cache
 
 from django.conf import settings
 from django.db import models
@@ -12,6 +13,8 @@ from insuree.models import Family
 from product.models import Product
 from contribution_plan.models import ContributionPlan
 from django.utils import timezone as django_tz
+from django.db.models.signals import post_save, post_delete
+from django.dispatch import receiver
 
 class Policy(core_models.VersionedModel):
     id = models.AutoField(db_column='PolicyID', primary_key=True)
@@ -128,3 +131,29 @@ class PolicyMutation(core_models.UUIDModel, core_models.ObjectMutation):
     class Meta:
         managed = True
         db_table = "policy_PolicyMutation"
+
+
+if 'claim' in sys.modules:
+    from claim.models import Claim
+    @receiver(post_save, sender=Claim)
+    @receiver(post_delete, sender=Claim)
+    def clean_inquire_cache(sender, instance, *args, **kwagrs):
+        cache.delete(f'elegibility_{instance.insuree.family_id or instance.insuree.id}_*')
+
+
+@receiver(post_save, sender=Product)
+@receiver(post_delete, sender=Product)
+def clean_all_inquire_cache(sender, instance, *args, **kwagrs):
+    cache.delete(f'elegibility_*')
+
+
+@receiver(post_save, sender=Policy)
+@receiver(post_delete, sender=Policy)
+def clean_all_inquire_cache(sender, instance, *args, **kwagrs):
+    cache.delete(f'elegibility_{instance.family_id}_*')
+
+ 
+@receiver(post_save, sender=Family)
+@receiver(post_delete, sender=Family)
+def clean_all_inquire_cache(sender, instance, *args, **kwagrs):
+    cache.delete(f'elegibility_{instance.id}_*')
