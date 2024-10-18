@@ -7,14 +7,21 @@ import django.db.models.deletion
 class Migration(migrations.Migration):
 
     dependencies = [
-        ('contribution_plan', '0013_alter_contributionplan_date_created_and_more'),
-        ('policy', '0007_fix_policy_mutation_name'),
+        ("contribution_plan", "0013_alter_contributionplan_date_created_and_more"),
+        ("policy", "0007_fix_policy_mutation_name"),
     ]
 
     operations = [
         migrations.AddField(
-            model_name='policy',
-            name='contribution_plan',
-            field=models.ForeignKey(blank=True, db_column='ContributionPlanID', null=True, on_delete=django.db.models.deletion.DO_NOTHING, related_name='contribution_plans', to='contribution_plan.contributionplan'),
+            model_name="policy",
+            name="contribution_plan",
+            field=models.ForeignKey(
+                blank=True,
+                db_column="ContributionPlanID",
+                null=True,
+                on_delete=django.db.models.deletion.DO_NOTHING,
+                related_name="contribution_plans",
+                to="contribution_plan.contributionplan",
+            ),
         ),
     ]
