@@ -16,7 +16,7 @@ from django.utils.translation import gettext as _
 import graphene_django_optimizer as gql_optimizer
 from graphene_django.filter import DjangoFilterConnectionField
 from core.models import Officer
-from .models import PolicyMutation, Policy
+from .models import PolicyMutation, Policy, PolicyRenewal
 from product.models import Product
 from insuree.models import Family, Insuree, InsureePolicy
 from django.db.models import OuterRef, Subquery, F, Count
@@ -29,6 +29,7 @@ from .gql_queries import (
     PolicyAndWarningsGQLType,
     PolicyGQLType,
     OfficerGQLType,
+    PolicyRenewalGQLType,
     PolicyByFamilyOrInsureeConnection,
 )  # lgtm [py/polluting-import]
 from .gql_mutations import (
