@@ -6,7 +6,12 @@ from django.core.cache import cache
 import core
 from claim.models import Claim, ClaimItem
 from django import dispatch
-from django.core.exceptions import PermissionDenied, ValidationError
+from django.core.exceptions import (
+    PermissionDenied,
+    ValidationError,
+    ObjectDoesNotExist,
+    MultipleObjectsReturned,
+)
 from django.db import connection
 from django.db.models import Q, Count, Min, Max, Sum, F
 from django.db.models.functions import Coalesce
@@ -773,11 +778,19 @@ class NativeEligibilityService(object):
         if item_or_service == "item":
             item_or_service_code = req.item_code
 
-        # TODO validity is checked but should be optional in get_queryset
-        item_or_service_obj = model.get_queryset(None, self.user).get(
-            code__iexact=item_or_service_code, *core.filter_validity()
-        )
-
+        # try to get the service/item with the exact code
+        try:
+            item_or_service_obj = model.get_queryset(None, self.user).get(
+                code=item_or_service_code
+            )
+        except model.DoesNotExist:
+            item_or_service_obj = model.get_queryset(None, self.user).filter(
+                code__iexact=item_or_service_code
+            ).first()
+            if item_or_service_obj is None:
+                raise model.DoesNotExist(f"{model.__name__} has no match for code {item_or_service_code}")
+        except MultipleObjectsReturned:
+            raise MultipleObjectsReturned(f"{model.__name__} has multiple match for code {item_or_service_code}")
         # Beware that MonthAdd() is in Gregorian calendar, not Nepalese or anything else
         queryset_item_or_service = (
             InsureePolicy.objects.filter(
