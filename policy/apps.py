@@ -24,7 +24,7 @@ DEFAULT_CFG = {
     "CTIVATION_OPTION_PAYMENT": 2,
     "ACTIVATION_OPTION_READY": 3,
     "contribution_receipt_length": 5,
-    "comores_features_enabled": False
+    "control_family_level": False
 }
 
 CALCULATION_RULES = []
@@ -57,7 +57,7 @@ class PolicyConfig(AppConfig):
     ACTIVATION_OPTION_READY = None
     activation_option = None
     contribution_receipt_length = None
-    comores_features_enabled = None
+    control_family_level = None
 
     def __load_config(self, cfg):
         for field in cfg:

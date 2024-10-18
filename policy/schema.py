@@ -106,7 +106,7 @@ class Query(graphene.ObjectType):
             )
         )
         if not contribution_plan:
-            raise Exception("Erreur, le plan de contribution nomé 'Contribution paamg' est introuvale")
+            raise ValidationError(_("policy.mutation.contribution_plan_not_found"))
         product = Product.objects.filter(
             Q(validity_to__isnull=True),
             Q(id=kwargs.get('product_id')) | Q(legacy_id=kwargs.get('product_id')),

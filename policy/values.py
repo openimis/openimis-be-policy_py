@@ -9,6 +9,8 @@ from core.apps import CoreConfig
 from dateutil.relativedelta import relativedelta
 from core.apps import CoreConfig
 from contribution_plan.models import ContributionPlan
+from django.utils.translation import gettext as _
+from django.core.exceptions import ValidationError
 
 def cycle_start(product, cycle, ref_date):
     c = getattr(product, "start_cycle_%s" % (cycle + 1), None)
@@ -205,7 +207,7 @@ def set_value(policy, family, prev_policy, user):
         )
     )
     if not instance:
-        raise Exception("Le plan de contribution nomé 'Contribution paamg' est introuvale")
+        raise ValidationError(_("policy.mutation.contribution_plan_not_found"))
     instance = instance[0]
     for calculation_rule in CALCULATION_RULES:
         result_signal = calculation_rule.signal_calculate_event.send(
@@ -215,7 +217,8 @@ def set_value(policy, family, prev_policy, user):
         if result_signal[0][1]:
             policy.value = Decimal(result_signal[0][1])
         else:
-            raise Exception("Une erreur est survenue lors du traitemant du montant de la police")
+            ValidationError(_("policy.mutation.policy_value_error"))
+            policy.value = Decimal(0)
 
 
 def policy_values(policy, family, prev_policy, user):
