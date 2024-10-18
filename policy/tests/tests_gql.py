@@ -55,8 +55,11 @@ class PolicyGraphQLTestCase(openIMISGraphQLTestCase):
         cls.service = create_test_service(
             "A", custom_props={"name": "test_simple_batch"}
         )
+        cls.service_2 = create_test_service(
+            "a", custom_props={"name": "test_simple_batch"}
+        )
         cls.item = create_test_item("A", custom_props={"name": "test_simple_batch"})
-
+        cls.item_2 = create_test_item("a", custom_props={"name": "test_simple_batch"})
         cls.product = create_test_product(
             "BCUL0001",
             custom_props={
@@ -299,7 +302,7 @@ class PolicyGraphQLTestCase(openIMISGraphQLTestCase):
             UUID(self.policy.uuid),
         )
 
-    def test_insuree_policy_query(self):
+    def test_insuree_policy_service_query(self):
 
         response = self.query(
             f"""
@@ -317,6 +320,7 @@ class PolicyGraphQLTestCase(openIMISGraphQLTestCase):
 
         # This validates the status code and if you get errors
         self.assertResponseNoErrors(response)
+    def test_insuree_policy_item_query(self):
 
         # Add some more asserts if you like
         response = self.query(
@@ -336,8 +340,23 @@ class PolicyGraphQLTestCase(openIMISGraphQLTestCase):
         # This validates the status code and if you get errors
         self.assertResponseNoErrors(response)
 
+    def test_insuree_policy_wrong_service_query(self):
+        response = self.query(
+            f"""
+{{
+  policyItemEligibilityByInsuree(chfId:"{self.insuree.chf_id}",itemCode:"IDONOTEXIST")
+  {{
+     minDateItem,itemLeft,isItemOk
+  }}
+}}
+            """,
+            headers={"HTTP_AUTHORIZATION": f"Bearer {self.admin_token}"},
+        )
+
+        # This validates the status code and if you get errors
+        self.assertResponseHasErrors(response)
+
         # Add some more asserts if you like
-        ...
 
     def test_mutation_simple(self):
         muuid = "203327cd-501e-41e1-a026-ed742e360081"
