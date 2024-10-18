@@ -197,6 +197,15 @@ class PolicyMutation(core_models.UUIDModel, core_models.ObjectMutation):
         managed = True
         db_table = "policy_PolicyMutation"
 
+class PolicyRenewalMutation(core_models.UUIDModel, core_models.ObjectMutation):
+    policy_renewal = models.ForeignKey(PolicyRenewal, models.DO_NOTHING,
+                                 related_name='mutations')
+    mutation = models.ForeignKey(
+        core_models.MutationLog, models.DO_NOTHING, related_name='policy_renewals')
+
+    class Meta:
+        managed = True
+        db_table = "policy_renewal_PolicyMutation"
 
 if "claim" in sys.modules:
     from claim.models import Claim

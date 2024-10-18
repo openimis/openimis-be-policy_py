@@ -16,7 +16,7 @@ from django.utils.translation import gettext as _
 import graphene_django_optimizer as gql_optimizer
 from graphene_django.filter import DjangoFilterConnectionField
 from core.models import Officer
-from .models import PolicyMutation, Policy
+from .models import PolicyMutation, Policy, PolicyRenewal
 from product.models import Product
 from insuree.models import Family, Insuree, InsureePolicy
 from django.db.models import OuterRef, Subquery, F, Count
@@ -29,6 +29,7 @@ from .gql_queries import (
     PolicyAndWarningsGQLType,
     PolicyGQLType,
     OfficerGQLType,
+    PolicyRenewalGQLType,
     PolicyByFamilyOrInsureeConnection,
 )  # lgtm [py/polluting-import]
 from .gql_mutations import (
@@ -64,6 +65,7 @@ class Query(graphene.ObjectType):
         confirmationType=graphene.String(),
         orderBy=graphene.List(of_type=graphene.String),
     )
+
     # Note:
     # A Policy is bound to a Family...
     # but an insuree of the family is only covered by the family policy
@@ -107,6 +109,18 @@ class Query(graphene.ObjectType):
         district=graphene.String(),
         region=graphene.String(),
     )
+
+    policy_renewals = DjangoFilterConnectionField(PolicyRenewalGQLType)
+
+    def resolve_policy_renewals(self, info, **kwargs):
+        if not info.context.user.has_perms(PolicyConfig.gql_mutation_renew_policies_perms):
+            raise PermissionDenied(_("unauthorized"))
+        user = info.context.user
+        filters = Q(validity_to__isnull=True)
+        if hasattr(user, "is_imis_admin") and not user.is_imis_admin:
+            enrollment_officer = user.officer
+            filters &= Q(new_officer=enrollment_officer)
+        return PolicyRenewal.objects.filter(filters)
 
     def resolve_policy_values(self, info, **kwargs):
         if not info.context.user.has_perms(PolicyConfig.gql_query_policies_perms):

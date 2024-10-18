@@ -41,6 +41,27 @@ def reset_policy_before_update(policy):
     policy.officer_id = None
 
 
+class PolicyRenewalService:
+    def __init__(self, user):
+        self.user = user
+
+    def delete(self, policy_renewal):
+        try:
+            policy_renewal.delete_history()
+            logger.info(f"Deleting the related policy renewal details, if any")
+            for detail in policy_renewal.details.all():
+                detail.delete_history()
+            return []
+        except Exception as exc:
+            logger.error(f'ERROR {exc}')
+            return {
+                'title': policy_renewal.uuid,
+                'list': [{
+                    'message': _("policy_renewal.mutation.failed_to_delete_policy_renewal") % {'policy_renewal': str(policy_renewal)},
+                    'detail': policy_renewal.uuid}]
+            }
+
+
 class PolicyService:
     def __init__(self, user):
         self.user = user

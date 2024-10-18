@@ -3,11 +3,11 @@ import logging
 import graphene
 from django.db import transaction
 
-from policy.services import PolicyService
+from policy.services import PolicyService, PolicyRenewalService
 
 from .apps import PolicyConfig
 from core.schema import OpenIMISMutation
-from .models import Policy, PolicyMutation
+from .models import Policy, PolicyMutation, PolicyRenewal
 from django.contrib.auth.models import AnonymousUser
 from django.core.exceptions import ValidationError, PermissionDenied
 from django.utils.translation import gettext as _
@@ -50,9 +50,24 @@ class CreateRenewOrUpdatePolicyMutation(OpenIMISMutation):
 
         data["validity_from"] = TimeUtils.now()
         policy = PolicyService(user).update_or_create(data, user)
+        logger.info(f"After policy create_or_update: {policy.uuid}")
+        if data["stage"] == Policy.STAGE_RENEWED:
+            logger.info("Deleting the optional PolicyRenewals after renewing")
+            previous_policy = (Policy.objects.filter(validity_to__isnull=True,
+                                                     family_id=data["family_id"],
+                                                     product_id=data["product_id"],
+                                                     status__in=[Policy.STATUS_EXPIRED, Policy.STATUS_ACTIVE])
+                                             .order_by("-id")
+                                             .first())
+            if not previous_policy:
+                logger.error("Can't find the policy that was renewed - not deleting the PolicyRenewals")
+            policy_renewals = PolicyRenewal.objects.filter(policy=previous_policy, validity_to__isnull=True)
+            logger.info(f"Total PolicyRenewals found: {policy_renewals.count()}")
+            [PolicyRenewalService(user).delete(policy_renewal) for policy_renewal in policy_renewals]
         PolicyMutation.object_mutated(
             user, client_mutation_id=client_mutation_id, policy=policy
         )
+
         return None
 
 
