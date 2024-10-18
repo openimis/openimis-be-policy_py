@@ -1,5 +1,7 @@
 from django.apps import AppConfig
 from django.conf import settings
+import importlib
+import inspect
 
 MODULE_NAME = "policy"
 
@@ -21,9 +23,18 @@ DEFAULT_CFG = {
     "ACTIVATION_OPTION_CONTRIBUTION": 1,
     "CTIVATION_OPTION_PAYMENT": 2,
     "ACTIVATION_OPTION_READY": 3,
-    "contribution_receipt_length": 5
+    "contribution_receipt_length": 5,
+    "control_family_level": False
 }
 
+CALCULATION_RULES = []
+
+def read_all_calculation_rules():
+    """function to read all calculation rules"""
+    for name, cls in inspect.getmembers(importlib.import_module("calculation_comores.calculation_rule"), inspect.isclass):
+        if 'calculation' in cls.__module__.split('.')[0]:
+            CALCULATION_RULES.append(cls)
+            cls.ready()
 
 class PolicyConfig(AppConfig):
     name = MODULE_NAME
@@ -46,6 +57,7 @@ class PolicyConfig(AppConfig):
     ACTIVATION_OPTION_READY = None
     activation_option = None
     contribution_receipt_length = None
+    control_family_level = None
 
     def __load_config(self, cfg):
         for field in cfg:
@@ -56,3 +68,4 @@ class PolicyConfig(AppConfig):
         from core.models import ModuleConfiguration
         cfg = ModuleConfiguration.get_or_default(MODULE_NAME, DEFAULT_CFG)
         self.__load_config(cfg)
+        read_all_calculation_rules()
