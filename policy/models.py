@@ -4,7 +4,9 @@ from core import fields
 from core import models as core_models
 from core.utils import filter_validity
 from core.models import Officer
-from django.core.cache import cache
+from django.core.cache import caches
+cache = caches['coverage']
+from django_redis.cache import RedisCache
 
 from django.conf import settings
 from django.db import models
@@ -205,23 +207,26 @@ if "claim" in sys.modules:
     @receiver(post_delete, sender=Claim)
     def clean_enquire_cache_claim(sender, instance, *args, **kwagrs):
         cache.delete(
-            f"eligibility_{instance.insuree.family_id or instance.insuree.id}_*"
+            f"eligibility_{instance.insuree.family_id or instance.insuree.id}"
         )
 
 
 @receiver(post_save, sender=Product)
 @receiver(post_delete, sender=Product)
 def clean_all_enquire_cache_product(sender, instance, *args, **kwagrs):
-    cache.delete("eligibility_*")
+    if isinstance(cache, RedisCache):
+        cache.delete("eligibility_*")
+    else:
+        cache.clear()
 
 
 @receiver(post_save, sender=Policy)
 @receiver(post_delete, sender=Policy)
 def clean_all_enquire_cache_policy(sender, instance, *args, **kwagrs):
-    cache.delete(f"eligibility_{instance.family_id}_*")
+    cache.delete(f"eligibility_{instance.family_id}")
 
 
 @receiver(post_save, sender=Family)
 @receiver(post_delete, sender=Family)
 def clean_all_enquire_cache_family(sender, instance, *args, **kwagrs):
-    cache.delete(f"eligibility_{instance.id}_*")
+    cache.delete(f"eligibility_{instance.id}")

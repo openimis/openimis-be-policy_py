@@ -1,7 +1,7 @@
 import logging
 from dataclasses import dataclass
 from datetime import datetime as py_datetime, date as py_date
-from django.core.cache import cache
+from django.core.cache import caches
 
 import core
 from claim.models import Claim, ClaimItem
@@ -40,6 +40,7 @@ def reset_policy_before_update(policy):
     policy.family_id = None
     policy.officer_id = None
 
+cache = caches['coverage']
 
 class PolicyService:
     def __init__(self, user):
@@ -916,10 +917,12 @@ class NativeEligibilityService(object):
         eligibility.item_left = items_left
 
         # InsPol -> Policy -> Product -> dedrem
-        result = cache.get(
-            f"eligibility_{insuree.family_id or insuree.id}_{insuree.id}"
+        cached_data = cache.get(
+            f"eligibility_{insuree.family_id or insuree.id}"
         )
-        if not result:
+        if cached_data and str(insuree.id) in cached_data:
+            result = cached_data[str(insuree.id)]
+        else:
             result = (
                 InsureePolicy.objects.filter(
                     insuree=insuree,
@@ -1023,8 +1026,11 @@ class NativeEligibilityService(object):
                 .order_by("-expiry_date")
                 .first()
             )
+            if not cached_data:
+                cached_data = {}
+                cached_data[str(insuree.id)] = result
             cache.set(
-                f"eligibility_{insuree.family_id or insuree.id}_{insuree.id}",
+                f"eligibility_{insuree.family_id or insuree.id}",
                 result,
                 None,
             )
