@@ -34,7 +34,7 @@ from medical_pricelist.test_helpers import (
     create_test_service_pricelist,
 )
 from django.db import connection
-from .models import Policy
+from policy.models import Policy
 
 
 class EligibilityServiceTestCase(TestCase):
