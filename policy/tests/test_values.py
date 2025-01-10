@@ -10,6 +10,7 @@ from core.apps import CoreConfig
 from core.test_helpers import create_test_interactive_user
 from dateutil.relativedelta import relativedelta
 from core.models.user import User
+import datetime
 
 
 class PolicyValuesTestCase(TestCase):
@@ -58,7 +59,10 @@ class PolicyValuesTestCase(TestCase):
                 "enroll_date": core.datetime.date(2020, 11, 10),
             },
         )
-        policy, warnings = policy_values(policy, head_insuree.family, None, self.user)
+        policy, warnings = policy_values(
+            policy, head_insuree.family, None, self.user,
+            datetime.datetime.strptime("2024-02-13", "%Y-%m-%d")
+        )
         self.assertEquals(policy.start_date, core.datetime.date(2020, 11, 10))
         self.assertEquals(policy.expiry_date, core.datetime.date(2021, 11, 9))
         self.assertEquals(policy.value, 980)  # 2 x 300 + 250 + 130
@@ -81,7 +85,10 @@ class PolicyValuesTestCase(TestCase):
                 "enroll_date": core.datetime.date(2020, 11, 1),
             },
         )
-        policy, warnings = policy_values(policy, head_insuree.family, None, self.user)
+        policy, warnings = policy_values(
+            policy, head_insuree.family, None, self.user,
+            datetime.datetime.strptime("2024-02-13", "%Y-%m-%d")
+        )
         self.assertEquals(policy.start_date, core.datetime.date(2020, 11, 1))
         self.assertEquals(policy.expiry_date, core.datetime.date(2021, 10, 31))
         self.assertEquals(policy.value, 1180)  # 2 x 300 + 200 + 250 + 130
@@ -127,7 +134,10 @@ class PolicyValuesTestCase(TestCase):
                 "enroll_date": core.datetime.date(2020, 11, 10),
             },
         )
-        policy, warnings = policy_values(policy, head_insuree.family, None, self.user)
+        policy, warnings = policy_values(
+            policy, head_insuree.family, None, self.user,
+            datetime.datetime.strptime("2024-02-13", "%Y-%m-%d")
+        )
         self.assertEquals(policy.start_date, core.datetime.date(2021, 1, 1))
         self.assertEquals(policy.expiry_date, core.datetime.date(2021, 12, 31))
         self.assertEquals(policy.value, 230)  # 200 + 2 x 10 + 2 x 5
@@ -150,7 +160,10 @@ class PolicyValuesTestCase(TestCase):
                 "enroll_date": core.datetime.date(2021, 1, 11),
             },
         )
-        policy, warnings = policy_values(policy, head_insuree.family, None, self.user)
+        policy, warnings = policy_values(
+            policy, head_insuree.family, None, self.user,
+            datetime.datetime.strptime("2024-02-13", "%Y-%m-%d")
+        )
         self.assertEquals(policy.start_date, core.datetime.date(2021, 1, 1))
         self.assertEquals(policy.expiry_date, core.datetime.date(2021, 12, 31))
         self.assertEquals(policy.value, 445)  # 200 + 1 x 200 + 3 x 10 + 3 x 5
@@ -197,7 +210,10 @@ class PolicyValuesTestCase(TestCase):
                 "enroll_date": core.datetime.date(2021, 1, 10),
             },
         )
-        policy, warnings = policy_values(policy, head_insuree.family, None, self.user)
+        policy, warnings = policy_values(
+            policy, head_insuree.family, None, self.user,
+            datetime.datetime.strptime("2024-02-13", "%Y-%m-%d")
+        )
         self.assertEquals(
             policy.start_date, core.datetime.date(2021, 6, 1)
         )  # enroll + admin outside cycle 1 + grace
@@ -224,7 +240,10 @@ class PolicyValuesTestCase(TestCase):
             check=False,
         )
 
-        policy, warnings = policy_values(policy, head_insuree.family, None, self.user)
+        policy, warnings = policy_values(
+            policy, head_insuree.family, None, self.user,
+            datetime.datetime.strptime("2024-02-13", "%Y-%m-%d")
+        )
         self.assertEquals(
             policy.start_date, core.datetime.date(2022, 1, 1)
         )  # enroll + admin in cycle 1 + grace
