@@ -22,12 +22,6 @@ from medical_pricelist.test_helpers import (
 )
 from insuree.test_helpers import create_test_insuree
 from policy.test_helpers import create_test_policy2, create_test_insuree_for_policy
-<<<<<<< HEAD:policy/test_services.py
-from product.test_helpers import create_test_product, create_test_product_service, create_test_product_item
-
-from .services import *
-from .models import Policy
-=======
 from product.test_helpers import (
     create_test_product,
     create_test_product_service,
@@ -40,7 +34,7 @@ from medical_pricelist.test_helpers import (
     create_test_service_pricelist,
 )
 from django.db import connection
->>>>>>> other-repo/develop:policy/tests/test_services.py
+from .models import Policy
 
 
 class EligibilityServiceTestCase(TestCase):
@@ -581,26 +575,9 @@ class RenewalsTestCase(TestCase):
             if insuree_oldpic.chf_id in sms.sms_message
         ]
         self.assertEquals(len(old_sms), 1)
-<<<<<<< HEAD:policy/test_services.py
-        self.assertTrue("HOF\nCHFMARK\nTest Last First Second\n\n" in old_sms[0])
-
-        # tearDown
-        renewals_old.first().details.all().delete()
-        renewals_old.delete()
-        renewals_new.first().details.all().delete()
-        renewals_new.delete()
-        inspolicy_old_pic.delete()
-        policy_old_pic.delete()
-        inspolicy_new_pic.delete()
-        policy_new_pic.delete()
-        officer.delete()
-        product.delete()
-        photo_newpic.delete()
-        photo_oldpic.delete()
-        insuree_oldpic.delete()
-        family_oldpic.delete()
-        insuree_newpic.delete()
-        family_newpic.delete()
+        self.assertTrue(
+            f"HOF\n{insuree_oldpic.chf_id}\nTest Last First Second\n\n" in old_sms[0]
+        )
 
     def test_update_or_create(self):
         import datetime
@@ -636,16 +613,3 @@ class RenewalsTestCase(TestCase):
         data["product_id"] = product3.id
         with self.assertRaises(Exception):
             policy_service.update_or_create(data=data, user=self.user)
-
-        # tearDown
-        policy.insuree_policies.all().delete()
-        policy.delete()
-        insuree.delete()
-        family.delete()
-        product.delete()
-        officer.delete()
-=======
-        self.assertTrue(
-            f"HOF\n{insuree_oldpic.chf_id}\nTest Last First Second\n\n" in old_sms[0]
-        )
->>>>>>> other-repo/develop:policy/tests/test_services.py
