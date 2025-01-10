@@ -2,8 +2,12 @@ import graphene
 from graphene_django import DjangoObjectType
 from django.utils.translation import gettext as _
 from .apps import PolicyConfig
-from .models import Policy
-from core import prefix_filterset, filter_validity, ExtendedConnection, ExtendedRelayConnection
+from .models import Policy, PolicyRenewal
+from core import (
+    prefix_filterset,
+    ExtendedConnection,
+    ExtendedRelayConnection,
+)
 from core.schema import OfficerGQLType
 from product.schema import ProductGQLType
 from django.core.exceptions import PermissionDenied
@@ -11,7 +15,7 @@ from django.core.exceptions import PermissionDenied
 
 class PolicyGQLType(DjangoObjectType):
     sum_premiums = graphene.Float(source="sum_premiums")
-    
+
     def resolve_family(self, info):
         if not info.context.user.has_perms(PolicyConfig.gql_query_policies_perms):
             raise PermissionDenied(_("unauthorized"))
@@ -37,13 +41,20 @@ class PolicyGQLType(DjangoObjectType):
             "effective_date": ["exact", "lt", "lte", "gt", "gte"],
             "expiry_date": ["exact", "lt", "lte", "gt", "gte"],
             "stage": ["exact"],
-            "status":  ["exact", "lt", "lte", "gt", "gte"],
+            "status": ["exact", "lt", "lte", "gt", "gte"],
             "value": ["exact", "lt", "lte", "gt", "gte"],
             **prefix_filterset("product__", ProductGQLType._meta.filter_fields),
             **prefix_filterset("officer__", OfficerGQLType._meta.filter_fields),
         }
         connection_class = ExtendedConnection
 
+class PolicyRenewalGQLType(DjangoObjectType):
+    class Meta:
+        model = PolicyRenewal
+        interfaces = (graphene.relay.Node,)
+        filter_fields = {
+        }
+        connection_class = ExtendedConnection
 
 class PolicyAndWarningsGQLType(graphene.ObjectType):
     policy = graphene.Field(PolicyGQLType)
@@ -76,6 +87,8 @@ class PolicyByFamilyOrInsureeGQLType(graphene.ObjectType):
     validity_from = graphene.Date()
     validity_to = graphene.Date()
     max_installments = graphene.Int()
+    contribution_plan_code = graphene.String()
+    contribution_plan_name = graphene.String()
 
 
 class PolicyByFamilyOrInsureeConnection(ExtendedRelayConnection):
@@ -102,4 +115,3 @@ class EligibilityGQLType(graphene.ObjectType):
     item_left = graphene.Int()
     is_item_ok = graphene.Boolean()
     is_service_ok = graphene.Boolean()
-

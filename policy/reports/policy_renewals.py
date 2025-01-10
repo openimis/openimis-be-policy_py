@@ -1,6 +1,5 @@
-from django.db.models import Q, Sum, F, QuerySet
+from django.db.models import Q, F, QuerySet
 
-from contribution.models import Premium
 from core.models import Officer
 from location.models import Location
 from policy.models import Policy
@@ -6167,11 +6166,7 @@ ALL_OFFICERS = -42424242
 SORTING_BY_DATE = "D"
 SORTING_BY_RECEIPT = "R"
 SORTING_BY_OFFICER = "O"
-AVAILABLE_SORTING_CHOICES = [
-    SORTING_BY_DATE,
-    SORTING_BY_RECEIPT,
-    SORTING_BY_OFFICER
-]
+AVAILABLE_SORTING_CHOICES = [SORTING_BY_DATE, SORTING_BY_RECEIPT, SORTING_BY_OFFICER]
 
 SORTING_FIELD_NAME_MAPPING = {
     SORTING_BY_DATE: "enroll_date",
@@ -6191,10 +6186,7 @@ def generate_subtotals(policies: QuerySet):
         amount = policy["amount"]
 
         if region_code not in subtotals:
-            subtotals[region_code] = {
-                district_code: amount,
-                "total": amount
-            }
+            subtotals[region_code] = {district_code: amount, "total": amount}
         elif district_code not in subtotals[region_code]:
             subtotals[region_code][district_code] = amount
             subtotals[region_code]["total"] += amount
@@ -6210,28 +6202,32 @@ def format_final_data(policies: QuerySet, subtotals: dict):
     # Formats the data in order to match what is expected by the report
     data = []
     for policy in policies:
-        region_code = policy['region_code']
-        district_code = policy['district_code']
-        insuree_id = str(policy["insuree_id"])  # explicitely cast the ID b/c the report doesn't understand when it's a number
+        region_code = policy["region_code"]
+        district_code = policy["district_code"]
+        insuree_id = str(
+            policy["insuree_id"]
+        )  # explicitely cast the ID b/c the report doesn't understand when it's a number
         new_data_line = {
             "region_total": subtotals[region_code]["total"],
             "district_total": subtotals[region_code][district_code],
             **policy,
-            "insuree_id": insuree_id
+            "insuree_id": insuree_id,
         }
         data.append(new_data_line)
     return data
 
 
-def policy_renewals_query(user,
-                          date_start="2019-01-01",
-                          date_end="2099-12-31",
-                          requested_region_id=ALL_REGIONS,
-                          requested_district_id=ALL_DISTRICTS,
-                          requested_product_id=ALL_PRODUCTS,
-                          requested_officer_id=ALL_OFFICERS,
-                          requested_sorting=SORTING_BY_DATE,
-                          **kwargs):
+def policy_renewals_query(
+    user,
+    date_start="2019-01-01",
+    date_end="2099-12-31",
+    requested_region_id=ALL_REGIONS,
+    requested_district_id=ALL_DISTRICTS,
+    requested_product_id=ALL_PRODUCTS,
+    requested_officer_id=ALL_OFFICERS,
+    requested_sorting=SORTING_BY_DATE,
+    **kwargs,
+):
     # /!\ Product is never displayed in the original report, it's only a search criteria.
 
     # Checking the parameters received and returning an error if anything is wrong
@@ -6251,43 +6247,65 @@ def policy_renewals_query(user,
             return {"error": "Error - the requested officer does not exist"}
     region_id = int(requested_region_id)
     if region_id != ALL_REGIONS:
-        region = Location.objects.filter(validity_to=None, type='R', id=region_id).first()
+        region = Location.objects.filter(
+            validity_to=None, type="R", id=region_id
+        ).first()
         if not region:
             return {"error": "Error - the requested region does not exist"}
     district_id = int(requested_district_id)
     if district_id != ALL_DISTRICTS:
         district_filters = Q(validity_to__isnull=True) & Q(type="D") & Q(id=district_id)
-        if region_id != ALL_REGIONS:  # The FE pickers allow you to select a district without a region, so additional steps are required
+        if (
+            region_id != ALL_REGIONS
+        ):  # The FE pickers allow you to select a district without a region, so additional steps are required
             district_filters &= Q(parent_id=region_id)
         district = Location.objects.filter(district_filters).first()
         if not district:
             return {"error": "Error - the requested district does not exist"}
-        if region_id == ALL_REGIONS:  # The FE pickers allow you to select a district without a region, so additional steps are required
+        if (
+            region_id == ALL_REGIONS
+        ):  # The FE pickers allow you to select a district without a region, so additional steps are required
             region = district.parent
             region_id = region.id
 
     # Preparing data for the header table
     header = {
-        "region": "All regions" if region_id == ALL_REGIONS else f"{region.code} - {region.name}",
-        "district": "All districts" if district_id == ALL_DISTRICTS else f"{district.code} - {district.name}",
-        "product": "All products" if product_id == ALL_PRODUCTS else f"{product.code} - {product.name}",
-        "officer": "All officers" if officer_id == ALL_OFFICERS else f"{officer.code} - {officer.other_names} {officer.last_name}",
+        "region": (
+            "All regions"
+            if region_id == ALL_REGIONS
+            else f"{region.code} - {region.name}"
+        ),
+        "district": (
+            "All districts"
+            if district_id == ALL_DISTRICTS
+            else f"{district.code} - {district.name}"
+        ),
+        "product": (
+            "All products"
+            if product_id == ALL_PRODUCTS
+            else f"{product.code} - {product.name}"
+        ),
+        "officer": (
+            "All officers"
+            if officer_id == ALL_OFFICERS
+            else f"{officer.code} - {officer.other_names} {officer.last_name}"
+        ),
         "sorting": requested_sorting,
         "date_from": date_start,
         "date_to": date_end,
     }
-    report_data = {
-        "header": [header]
-    }
+    report_data = {"header": [header]}
 
     # Prepare the search criteria based on the received parameters
-    search_filters = (Q(validity_to__isnull=True)
-                      & Q(family__validity_to__isnull=True)
-                      & Q(family__head_insuree__validity_to__isnull=True)
-                      & Q(officer__validity_to__isnull=True)
-                      & Q(premiums__validity_to__isnull=True)
-                      & Q(stage="R")
-                      & Q(enroll_date__range=[date_start, date_end]))
+    search_filters = (
+        Q(validity_to__isnull=True)
+        & Q(family__validity_to__isnull=True)
+        & Q(family__head_insuree__validity_to__isnull=True)
+        & Q(officer__validity_to__isnull=True)
+        & Q(premiums__validity_to__isnull=True)
+        & Q(stage="R")
+        & Q(enroll_date__range=[date_start, date_end])
+    )
     if product_id != ALL_PRODUCTS:
         search_filters &= Q(product_id=product_id)
     if officer_id != ALL_OFFICERS:
@@ -6298,27 +6316,28 @@ def policy_renewals_query(user,
         search_filters &= Q(family__location__parent__parent__parent_id=region_id)
     last_order_by_criterion = SORTING_FIELD_NAME_MAPPING[requested_sorting]
 
-    policies = Policy.objects.filter(search_filters) \
-                             .values("enroll_date",
-                                     region_code=F("family__location__parent__parent__parent__code"),
-                                     region_name=F("family__location__parent__parent__parent__name"),
-                                     district_code=F("family__location__parent__parent__code"),
-                                     district_name=F("family__location__parent__parent__name"),
-                                     ward_name=F("family__location__parent__name"),
-                                     village_name=F("family__location__name"),
-                                     insuree_id=F("family__head_insuree_id"),
-                                     insuree_other_names=F("family__head_insuree__other_names"),
-                                     insuree_last_name=F("family__head_insuree__last_name"),
-                                     officer_code=F("officer__code"),
-                                     officer_last_name=F("officer__last_name"),
-                                     officer_other_names=F("officer__other_names"),
-                                     receipt=F("premiums__receipt"),
-                                     amount=F("premiums__amount"),
-                                     payer=F("premiums__payer__name"),
-                                     ) \
-                             .order_by("region_code",
-                                       "district_code",
-                                       last_order_by_criterion)
+    policies = (
+        Policy.objects.filter(search_filters)
+        .values(
+            "enroll_date",
+            region_code=F("family__location__parent__parent__parent__code"),
+            region_name=F("family__location__parent__parent__parent__name"),
+            district_code=F("family__location__parent__parent__code"),
+            district_name=F("family__location__parent__parent__name"),
+            ward_name=F("family__location__parent__name"),
+            village_name=F("family__location__name"),
+            insuree_id=F("family__head_insuree_id"),
+            insuree_other_names=F("family__head_insuree__other_names"),
+            insuree_last_name=F("family__head_insuree__last_name"),
+            officer_code=F("officer__code"),
+            officer_last_name=F("officer__last_name"),
+            officer_other_names=F("officer__other_names"),
+            receipt=F("premiums__receipt"),
+            amount=F("premiums__amount"),
+            payer=F("premiums__payer__name"),
+        )
+        .order_by("region_code", "district_code", last_order_by_criterion)
+    )
 
     subtotals = generate_subtotals(policies)
     report_data["total_amount"] = subtotals["total"]

@@ -6,12 +6,12 @@ from django.db import migrations
 class Migration(migrations.Migration):
 
     dependencies = [
-        ('policy', '0006_set_model_managed_to_true'),
+        ("policy", "0006_set_model_managed_to_true"),
     ]
 
     operations = [
         migrations.AlterModelTable(
-            name='policymutation',
-            table='policy_PolicyMutation',
+            name="policymutation",
+            table="policy_PolicyMutation",
         ),
     ]

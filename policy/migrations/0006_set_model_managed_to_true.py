@@ -6,16 +6,16 @@ from django.db import migrations
 class Migration(migrations.Migration):
 
     dependencies = [
-        ('policy', '0005_add_foreign_keys'),
+        ("policy", "0005_add_foreign_keys"),
     ]
 
     operations = [
         migrations.AlterModelOptions(
-            name='policy',
-            options={'managed': True},
+            name="policy",
+            options={"managed": True},
         ),
         migrations.AlterModelOptions(
-            name='policyrenewal',
-            options={'managed': True},
+            name="policyrenewal",
+            options={"managed": True},
         ),
     ]

@@ -5,8 +5,18 @@ from policy.services import insert_renewals, update_renewals, policy_renewal_sms
 logger = logging.getLogger(__name__)
 
 
-def get_policies_for_renewal(interval=None, region=None, district=None, ward=None, village=None, officer=None,
-                             date_from=None, date_to=None, family_message_template=None, sms_header_template=None):
+def get_policies_for_renewal(
+    interval=None,
+    region=None,
+    district=None,
+    ward=None,
+    village=None,
+    officer=None,
+    date_from=None,
+    date_to=None,
+    family_message_template=None,
+    sms_header_template=None,
+):
     """
     Find policies that are due for renewal, add them to the renewal queue, mark the expired policies as expired
     All parameters are optional.
@@ -31,9 +41,17 @@ def get_policies_for_renewal(interval=None, region=None, district=None, ward=Non
             break
     else:
         location = None
-    insert_renewals(date_from, date_to, officer_id=officer, reminding_interval=interval, location_id=location)
+    insert_renewals(
+        date_from,
+        date_to,
+        officer_id=officer,
+        reminding_interval=interval,
+        location_id=location,
+    )
     update_renewals()
-    sms_queue = policy_renewal_sms(family_message_template, date_from, date_to, sms_header_template)
+    sms_queue = policy_renewal_sms(
+        family_message_template, date_from, date_to, sms_header_template
+    )
     for sms in sms_queue:
         send_sms(sms)
 
@@ -44,4 +62,8 @@ def send_sms(sms):
     the needs of the gateway, its processing status etc.
     :param sms: sms queue item, contains phone, sms_message, index
     """
-    logger.warning("Sending an SMS needs a defined gateway, pretending to send to %s:\n%s", sms.phone, sms.sms_message)
+    logger.warning(
+        "Sending an SMS needs a defined gateway, pretending to send to %s:\n%s",
+        sms.phone,
+        sms.sms_message,
+    )
