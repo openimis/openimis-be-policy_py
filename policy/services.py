@@ -83,7 +83,7 @@ class PolicyService:
                 if product.age_minimal:
                     if(age_patient < product.age_minimal):
                         # The insuree's age is lower than the min age
-                        raise Exception("policy.min_age_not_riched")
+                        raise Exception("policy.min_age_not_reached")
                 if product.age_maximal:
                     diff = product.age_maximal - age_patient
                     if(diff < 0):
