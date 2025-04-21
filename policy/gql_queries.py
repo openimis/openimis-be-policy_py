@@ -81,6 +81,9 @@ class PolicyByFamilyOrInsureeGQLType(graphene.ObjectType):
     max_installments = graphene.Int()
     contribution_plan_code = graphene.String()
     contribution_plan_name = graphene.String()
+    signature_date = graphene.Date()
+    periodicity = graphene.String()
+    payment_day = graphene.Int()
 
 
 class PolicyByFamilyOrInsureeConnection(ExtendedRelayConnection):

@@ -197,6 +197,9 @@ class ByFamilyOrInsureeResponseItem(object):
                  validity_from,
                  validity_to,
                  max_installments,
+                 signature_date,
+                 periodicity,
+                 payment_day,
                  contribution_plan_code=None,
                  contribution_plan_name=None
                  ):
@@ -222,6 +225,9 @@ class ByFamilyOrInsureeResponseItem(object):
         self.validity_from = validity_from
         self.validity_to = validity_to
         self.max_installments = max_installments
+        self.signature_date = signature_date
+        self.periodicity = periodicity
+        self.payment_day = payment_day
         self.contribution_plan_code = contribution_plan_code
         self.contribution_plan_name = contribution_plan_name
 
@@ -322,6 +328,9 @@ class FilteredPoliciesService(object):
             validity_from=row.validity_from,
             validity_to=row.validity_to,
             max_installments=row.product.max_installments,
+            signature_date=row.signature_date,
+            periodicity=row.periodicity,
+            payment_day=row.payment_day,
             contribution_plan_code=contribution_plan_code,
             contribution_plan_name=contribution_plan_name,
         )
