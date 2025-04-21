@@ -39,6 +39,9 @@ class PolicyGQLType(DjangoObjectType):
             "stage": ["exact"],
             "status":  ["exact", "lt", "lte", "gt", "gte"],
             "value": ["exact", "lt", "lte", "gt", "gte"],
+            "signature_date": ["exact", "lt", "lte", "gt", "gte"],
+            "periodicity": ["exact"],
+            "payment_day": ["exact"],
             **prefix_filterset("product__", ProductGQLType._meta.filter_fields),
             **prefix_filterset("officer__", OfficerGQLType._meta.filter_fields),
         }

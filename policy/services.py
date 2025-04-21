@@ -34,6 +34,9 @@ def reset_policy_before_update(policy):
     policy.product_id = None
     policy.family_id = None
     policy.officer_id = None
+    policy.signature_date = None
+    policy.periodicity = None
+    policy.payment_day = None
 
 
 class PolicyService:
@@ -44,9 +47,22 @@ class PolicyService:
     def update_or_create(self, data, user): 
         if isinstance(data['enroll_date'], str):
             data['enroll_date'] = py_datetime.strptime(data['enroll_date'], "%Y-%m-%d").date()
+        if isinstance(data.get('signature_date'), str):
+            data['signature_date'] = py_datetime.strptime(data['signature_date'], "%Y-%m-%d").date()
         policy_uuid = data.get('uuid', None)
         if 'enroll_date' in data and data['enroll_date'] > py_date.today():
             raise ValidationError("policy.enroll_date_in_the_future")
+        if PolicyConfig.is_signature_enabled and data.get('signature_date') and data.get('enroll_date'):
+            if data['signature_date'] < data['enroll_date']:
+                raise ValidationError("policy.signature_date_before_enroll_date")
+        if data.get('signature_date') and not data.get('periodicity'):
+            raise ValidationError({
+                'periodicity': "policy.periodicity_required_if_signed"
+            })
+        if data.get('signature_date') and not data.get('payment_day'):
+            raise ValidationError({
+                'payment_day': "policy.payment_day_required_if_signed"
+            })
         if policy_uuid:
             return self.update_policy(data, user)
         else:

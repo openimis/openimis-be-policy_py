@@ -56,7 +56,7 @@ None
 * policy_renewal_interval: Notify renewal nb of days before expiry date, default: `14`
 * policy_location_via: Filter policies on user's location path. Default: via `family` location (otherwize via product)
 * enable_polygamic_family: Define if the polygamic family implemetation should be enabled or not default: `False`.
-
+* is_signature_enabled: Enable the signature date and related periodicity logic in the policy form. default: `False`
 ## openIMIS Modules Dependencies
 * claim.models.ClaimOfficer
 * insuree.models.Family
