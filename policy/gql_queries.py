@@ -39,6 +39,9 @@ class PolicyGQLType(DjangoObjectType):
             "stage": ["exact"],
             "status":  ["exact", "lt", "lte", "gt", "gte"],
             "value": ["exact", "lt", "lte", "gt", "gte"],
+            "signature_date": ["exact", "lt", "lte", "gt", "gte"],
+            "periodicity": ["exact"],
+            "payment_day": ["exact"],
             **prefix_filterset("product__", ProductGQLType._meta.filter_fields),
             **prefix_filterset("officer__", OfficerGQLType._meta.filter_fields),
         }
@@ -78,6 +81,9 @@ class PolicyByFamilyOrInsureeGQLType(graphene.ObjectType):
     max_installments = graphene.Int()
     contribution_plan_code = graphene.String()
     contribution_plan_name = graphene.String()
+    signature_date = graphene.Date()
+    periodicity = graphene.String()
+    payment_day = graphene.Int()
 
 
 class PolicyByFamilyOrInsureeConnection(ExtendedRelayConnection):

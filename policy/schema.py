@@ -206,6 +206,9 @@ class Query(graphene.ObjectType):
             validity_from=item.validity_from,
             validity_to=item.validity_to,
             max_installments=item.max_installments,
+            signature_date = item.signature_date,
+            periodicity = item.periodicity,
+            payment_day = item.payment_day,
         )
 
     def resolve_policies_by_insuree(self, info, **kwargs):
