@@ -34,7 +34,7 @@ class PolicyInputType(OpenIMISMutation.Input):
     contribution_plan_id = graphene.UUID(required=True)
     signature_date = graphene.Date(required=False)
     periodicity = graphene.String(required=False)
-    payment_day = graphene.Decimal(required=False)
+    payment_day = graphene.Int(required=False)
 
 
 class CreateRenewOrUpdatePolicyMutation(OpenIMISMutation):
