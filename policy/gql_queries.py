@@ -11,6 +11,7 @@ from django.core.exceptions import PermissionDenied
 
 class PolicyGQLType(DjangoObjectType):
     sum_premiums = graphene.Float(source="sum_premiums")
+    payment_day = graphene.Int()
     
     def resolve_family(self, info):
         if not info.context.user.has_perms(PolicyConfig.gql_query_policies_perms):
