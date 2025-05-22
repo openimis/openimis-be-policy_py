@@ -26,7 +26,7 @@ DEFAULT_CFG = {
     "contribution_receipt_length": 5,
     "enable_polygamic_family": False,
     "is_signature_enabled": False,
-    "generate_invoice_on_contribution": False
+    "generate_invoice_on_policy": False
 }
 
 CALCULATION_RULES = []
@@ -61,7 +61,7 @@ class PolicyConfig(AppConfig):
     contribution_receipt_length = None
     enable_polygamic_family = None
     is_signature_enabled = None
-    generate_invoice_on_contribution = None
+    generate_invoice_on_policy = None
 
     def __load_config(self, cfg):
         for field in cfg:

@@ -112,9 +112,9 @@ class PolicyService:
                 premium_data["payer_uuid"] = payer_uuid
             premium_action(premium_data, user)
         logger.warning("Config for invoice generation %s",
-                    PolicyConfig.generate_invoice_on_contribution)
+                    PolicyConfig.generate_invoice_on_policy)
         family = Family.objects.filter(id=data["family_id"]).first()
-        if PolicyConfig.generate_invoice_on_contribution:
+        if PolicyConfig.generate_invoice_on_policy:
             family_amount = 0
             government_amount = 0
             contribution_plan = ContributionPlan.objects.filter(
