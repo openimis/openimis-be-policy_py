@@ -1,6 +1,6 @@
 import logging
 from dataclasses import dataclass
-from datetime import datetime as py_datetime, date as py_date
+from datetime import timedelta, datetime as py_datetime, date as py_date
 
 import core
 from claim.models import ClaimService, Claim, ClaimItem
@@ -12,7 +12,13 @@ from django.db.models.functions import Coalesce
 from django.template import Template, Context
 from django.utils.translation import gettext as _
 from graphene.utils.str_converters import to_snake_case
-
+from invoice.services import InvoiceService
+from invoice.services.invoiceLineItem import InvoiceLineItemService
+from invoice.models import Invoice
+from .apps import CALCULATION_RULES
+from contribution_plan.models import ContributionPlan
+from decimal import Decimal
+from core.datetimes.shared import datetimedelta
 from policy.utils import get_queryset_valid_at_date
 from core.signals import register_service_signal
 from insuree.models import Insuree, Family, InsureePolicy
@@ -105,6 +111,216 @@ class PolicyService:
             if payer_uuid is not None:
                 premium_data["payer_uuid"] = payer_uuid
             premium_action(premium_data, user)
+        logger.warning("Config for invoice generation %s",
+                    PolicyConfig.generate_invoice_on_contribution)
+        family = Family.objects.filter(id=data["family_id"]).first()
+        if PolicyConfig.generate_invoice_on_contribution:
+            family_amount = 0
+            government_amount = 0
+            contribution_plan = ContributionPlan.objects.filter(
+                uuid=str(
+                    data["contribution_plan_id"]
+                )
+            )
+            contribution_plan = contribution_plan[0]
+            if contribution_plan:
+                for calculation_rule in CALCULATION_RULES:
+                    # get calculation_rule amount for government
+                    result_signal = calculation_rule.signal_calculate_event.send(
+                        sender=contribution_plan.__class__.__name__, instance=contribution_plan,
+                        user=user, context="create",
+                        family=family,
+                        is_government_value=True
+                    )
+                    logger.warning("result_signal %s ", result_signal)
+                    if result_signal[0][1]:
+                        government_amount = Decimal(result_signal[0][1])
+                        logger.warning("government_amount %s ", government_amount)
+                    
+                    # get calculation_rule for familly
+                    result_signal = calculation_rule.signal_calculate_event.send(
+                        sender=contribution_plan.__class__.__name__, instance=contribution_plan,
+                        user=user, context="create",
+                        family=family,
+                        is_government_value=False
+                    )
+                    logger.warning("result_signal2 %s ", result_signal)
+                    if result_signal[0][1]:
+                        family_amount = Decimal(result_signal[0][1])
+                        logger.warning("family_amount %s ", family_amount)
+                logger.warning("date_valid_from of the contribution %s",
+                               contribution_plan.date_valid_from)
+                logger.warning("date_valid_to of the contribution %s",
+                               contribution_plan.date_valid_to)
+                today = py_datetime.now()
+                generate = False
+                if today > contribution_plan.date_valid_from:
+                    if contribution_plan.date_valid_to:
+                        if contribution_plan.date_valid_to > today:
+                            generate = True
+                    else:
+                        # Validity to is null
+                        generate = True
+                if generate:
+                    periodicity = 12
+                    if data["periodicity"]:
+                        if data["periodicity"] == 'Q':
+                            periodicity = 3
+                        elif data["periodicity"] == 'S':
+                            periodicity = 6
+                        elif data["periodicity"] == 'M':
+                            periodicity = 1
+                    renewal_date = today + datetimedelta(
+                        months=periodicity
+                    )
+                    logger.warning("renewal date %s", renewal_date)
+                    ok = False
+                    if not contribution_plan.date_valid_to:
+                        ok = True
+                    else:
+                        if renewal_date < contribution_plan.\
+                            date_valid_to:
+                            ok = True
+                    if ok:
+                        logger.warning("Family %s", family.id)
+                        insuree_numbers = ""
+                        members = Insuree.objects.filter(
+                            family_id=family.id,
+                            validity_to__isnull=True
+                        )
+                        for membre in members:
+                            insuree_numbers += str(membre.id)
+                        code = insuree_numbers + str(today.year) + str(today.month)
+                        date_due = today + datetimedelta(
+                            months=1
+                        )
+                        logger.warning("date due %s", date_due)
+                        if data["payment_day"]:
+                            date_due = date_due.replace(day=int(data["payment_day"]))
+                            logger.warning("date due updated %s", date_due)
+                        date_valid_to = renewal_date - timedelta(days=1)
+                        logger.warning("current date_valid_to %s", date_valid_to)
+                        quantity = 1
+                        if data["periodicity"]:
+                            if data["periodicity"] == 'Q':
+                                family_amount = family_amount * 3
+                                quantity = 3
+                                government_amount = government_amount * 3
+                            elif data["periodicity"] == 'S':
+                                family_amount = family_amount * 6
+                                quantity = 6
+                                government_amount = government_amount * 6
+                            elif data["periodicity"] == 'Y':
+                                family_amount = family_amount * 12
+                                quantity = 12
+                                government_amount = government_amount * 12
+                        logger.warning("government amount %s ",
+                                        government_amount)
+                        logger.warning("family amount %s ", family_amount)
+                        logger.warning("head insuree %s ",
+                                       family.head_insuree)
+                        existing_invoices = Invoice.objects.filter(
+                            code=code)
+                        logger.warning("existing invoices %s ",
+                                        existing_invoices)
+                        if not existing_invoices:
+                            # code = code + "_" + str(
+                            #     len(existing_invoices)+1)
+                            # create goverment invoice
+                            if government_amount > 0:
+                                values = {
+                                    "code": code,
+                                    "date_due": date_due,
+                                    "date_valid_from": date_due,
+                                    "date_valid_to": date_valid_to,
+                                    "amount_net": government_amount,
+                                    "amount_total": government_amount,
+                                    "status": 1,
+                                    "cron_job_code": code
+                                }
+                                if family.head_insuree:
+                                    values["subject_id"] = family.head_insuree.id
+                                    values["subject_type"] = "insuree"
+                                    values["thirdparty_id"] = family.head_insuree.id
+                                    values["thirdparty_type"] = "insuree"
+                                    if family_amount > 0:
+                                        # update code as two invoice will be
+                                        # created as the code is unique
+                                        values["code"] = values["code"] + "-G"
+                                        values["cron_job_code"] = values["cron_job_code"] + "-G"
+                                invoice_service = InvoiceService(user=user)
+                                result_invoice = invoice_service.create(
+                                    values
+                                )
+                                logger.warning(
+                                    "Invoice government_amount created %s",
+                                    result_invoice)
+                                if result_invoice["success"] is True:
+                                    invoice_line_item_service =\
+                                        InvoiceLineItemService(user=user)
+                                    item_values = {
+                                        "invoice_id": result_invoice["data"]["id"],
+                                        "code": code,
+                                        "ledger_account": "Etat",
+                                        "quantity": quantity,
+                                        "unit_price": government_amount,
+                                        "amount_net": government_amount,
+                                        "amount_total": government_amount,
+                                        "cron_job_code": code
+                                    }
+                                    if family_amount > 0:
+                                        # update code as two invoice will be
+                                        # created as the code is unique
+                                        item_values["code"] = item_values["code"] + "-G"
+                                        item_values["cron_job_code"] = item_values["cron_job_code"] + "-G"
+                                    result = invoice_line_item_service.create(
+                                        item_values
+                                    )
+                                    logger.warning(
+                                        "Invoice line gov_amount created %s",
+                                        result)
+                            # create Family invoice
+                            if family_amount > 0:
+                                invoice_service = InvoiceService(user=user)
+                                gov_values = {
+                                    "code": code,
+                                    "date_due": date_due,
+                                    "date_valid_from": date_due,
+                                    "date_valid_to": date_valid_to,
+                                    "amount_net": family_amount,
+                                    "amount_total": family_amount,
+                                    "status": 1,
+                                    "cron_job_code": code
+                                }
+                                if family.head_insuree:
+                                    gov_values["subject_id"] = family.head_insuree.id
+                                    gov_values["subject_type"] = "insuree"
+                                    gov_values["thirdparty_id"] = family.head_insuree.id
+                                    gov_values["thirdparty_type"] = "insuree"
+                                result_invoice = invoice_service.create(
+                                    gov_values
+                                )
+                                logger.warning(
+                                    "Invoice family amount created %s",
+                                    result_invoice)
+                                if result_invoice["success"] is True:
+                                    invoice_line_item_service =\
+                                        InvoiceLineItemService(user=user)
+                                    result = invoice_line_item_service.create(
+                                        {
+                                            "invoice_id": result_invoice["data"]["id"],
+                                            "code": code,
+                                            "ledger_account": "Cotisant",
+                                            "quantity": quantity,
+                                            "unit_price": family_amount,
+                                            "amount_net": family_amount,
+                                            "amount_total": family_amount,
+                                            "cron_job_code": code
+                                        }
+                                    )
+                                    logger.warning(
+                                        "Invoice line amount_family created %s",
+                                        result)
         return policy
 
     def generate_contribution_receipt(self, product, enroll_date):
