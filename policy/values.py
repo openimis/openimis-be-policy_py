@@ -11,6 +11,7 @@ from core.apps import CoreConfig
 from contribution_plan.models import ContributionPlan
 from django.utils.translation import gettext as _
 from django.core.exceptions import ValidationError
+from uuid import UUID
 
 def cycle_start(product, cycle, ref_date):
     c = getattr(product, "start_cycle_%s" % (cycle + 1), None)
@@ -201,11 +202,16 @@ def set_value(policy, family, prev_policy, user):
     registration = sum_registrations(policy, product, f_counts)
     policy.value = Decimal(contributions + general_assembly + registration)
     discount(policy, prev_policy)
-    instance = ContributionPlan.objects.filter(
-        uuid=str(
-            policy.contribution_plan
+    if policy.contribution_plan:
+        if isinstance(policy.contribution_plan, (str, UUID)):
+            contribution_plan_uuid = policy.contribution_plan
+        else:
+            contribution_plan_uuid = policy.contribution_plan.uuid
+        instance = ContributionPlan.objects.filter(
+            uuid=str(
+                contribution_plan_uuid
+            )
         )
-    )
     if not instance:
         raise ValidationError(_("policy.mutation.contribution_plan_not_found"))
     instance = instance[0]
