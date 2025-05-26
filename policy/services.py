@@ -225,104 +225,110 @@ class PolicyService:
                             )
                         logger.warning("existing invoices %s ",
                                         existing_invoices)
-                        if existing_invoices:
-                            code = code + "_" + str(
-                                len(existing_invoices)+1)
-                        # create goverment invoice
-                        if government_amount > 0:
-                            values = {
-                                "code": code,
-                                "date_due": date_due,
-                                "date_valid_from": date_due,
-                                "date_valid_to": date_valid_to,
-                                "amount_net": government_amount,
-                                "amount_total": government_amount,
-                                "status": 1,
-                                "cron_job_code": code
-                            }
-                            if family.head_insuree:
-                                values["subject_id"] = family.head_insuree.id
-                                values["subject_type"] = "insuree"
-                                values["thirdparty_id"] = family.head_insuree.id
-                                values["thirdparty_type"] = "insuree"
-                                if family_amount > 0:
-                                    # update code as two invoice will be
-                                    # created as the code is unique
-                                    values["code"] = values["code"] + "-G"
-                                    values["cron_job_code"] = values["cron_job_code"] + "-G"
-                            invoice_service = InvoiceService(user=user)
-                            result_invoice = invoice_service.create(
-                                values
+                        if not existing_invoices:
+                            same_code_invoices = Invoice.objects.filter(
+                                code=code
                             )
-                            logger.warning(
-                                "Invoice government_amount created %s",
-                                result_invoice)
-                            if result_invoice["success"] is True:
-                                invoice_line_item_service =\
-                                    InvoiceLineItemService(user=user)
-                                item_values = {
-                                    "invoice_id": result_invoice["data"]["id"],
+                            logger.warning("same code invoices %s ",
+                                        same_code_invoices)
+                            if same_code_invoices:
+                                code = code + "_" + str(
+                                    len(same_code_invoices)+1)
+                            # create goverment invoice
+                            if government_amount > 0:
+                                values = {
                                     "code": code,
-                                    "ledger_account": "Etat",
-                                    "quantity": quantity,
-                                    "unit_price": government_amount,
+                                    "date_due": date_due,
+                                    "date_valid_from": date_due,
+                                    "date_valid_to": date_valid_to,
                                     "amount_net": government_amount,
                                     "amount_total": government_amount,
+                                    "status": 1,
                                     "cron_job_code": code
                                 }
-                                if family_amount > 0:
-                                    # update code as two invoice will be
-                                    # created as the code is unique
-                                    item_values["code"] = item_values["code"] + "-G"
-                                    item_values["cron_job_code"] = item_values["cron_job_code"] + "-G"
-                                result = invoice_line_item_service.create(
-                                    item_values
+                                if family.head_insuree:
+                                    values["subject_id"] = family.head_insuree.id
+                                    values["subject_type"] = "insuree"
+                                    values["thirdparty_id"] = family.head_insuree.id
+                                    values["thirdparty_type"] = "insuree"
+                                    if family_amount > 0:
+                                        # update code as two invoice will be
+                                        # created as the code is unique
+                                        values["code"] = values["code"] + "-G"
+                                        values["cron_job_code"] = values["cron_job_code"] + "-G"
+                                invoice_service = InvoiceService(user=user)
+                                result_invoice = invoice_service.create(
+                                    values
                                 )
                                 logger.warning(
-                                    "Invoice line gov_amount created %s",
-                                    result)
-                        # create Family invoice
-                        if family_amount > 0:
-                            invoice_service = InvoiceService(user=user)
-                            gov_values = {
-                                "code": code,
-                                "date_due": date_due,
-                                "date_valid_from": date_due,
-                                "date_valid_to": date_valid_to,
-                                "amount_net": family_amount,
-                                "amount_total": family_amount,
-                                "status": 1,
-                                "cron_job_code": code
-                            }
-                            if family.head_insuree:
-                                gov_values["subject_id"] = family.head_insuree.id
-                                gov_values["subject_type"] = "insuree"
-                                gov_values["thirdparty_id"] = family.head_insuree.id
-                                gov_values["thirdparty_type"] = "insuree"
-                            result_invoice = invoice_service.create(
-                                gov_values
-                            )
-                            logger.warning(
-                                "Invoice family amount created %s",
-                                result_invoice)
-                            if result_invoice["success"] is True:
-                                invoice_line_item_service =\
-                                    InvoiceLineItemService(user=user)
-                                result = invoice_line_item_service.create(
-                                    {
+                                    "Invoice government amount created %s",
+                                    result_invoice)
+                                if result_invoice["success"] is True:
+                                    invoice_line_item_service =\
+                                        InvoiceLineItemService(user=user)
+                                    item_values = {
                                         "invoice_id": result_invoice["data"]["id"],
                                         "code": code,
-                                        "ledger_account": "Cotisant",
+                                        "ledger_account": "Etat",
                                         "quantity": quantity,
-                                        "unit_price": family_amount,
-                                        "amount_net": family_amount,
-                                        "amount_total": family_amount,
+                                        "unit_price": government_amount,
+                                        "amount_net": government_amount,
+                                        "amount_total": government_amount,
                                         "cron_job_code": code
                                     }
+                                    if family_amount > 0:
+                                        # update code as two invoice will be
+                                        # created as the code is unique
+                                        item_values["code"] = item_values["code"] + "-G"
+                                        item_values["cron_job_code"] = item_values["cron_job_code"] + "-G"
+                                    result = invoice_line_item_service.create(
+                                        item_values
+                                    )
+                                    logger.warning(
+                                        "Invoice line gov_amount created %s",
+                                        result)
+                            # create Family invoice
+                            if family_amount > 0:
+                                invoice_service = InvoiceService(user=user)
+                                gov_values = {
+                                    "code": code,
+                                    "date_due": date_due,
+                                    "date_valid_from": date_due,
+                                    "date_valid_to": date_valid_to,
+                                    "amount_net": family_amount,
+                                    "amount_total": family_amount,
+                                    "status": 1,
+                                    "cron_job_code": code
+                                }
+                                if family.head_insuree:
+                                    gov_values["subject_id"] = family.head_insuree.id
+                                    gov_values["subject_type"] = "insuree"
+                                    gov_values["thirdparty_id"] = family.head_insuree.id
+                                    gov_values["thirdparty_type"] = "insuree"
+                                result_invoice = invoice_service.create(
+                                    gov_values
                                 )
                                 logger.warning(
-                                    "Invoice line amount_family created %s",
-                                    result)
+                                    "Invoice family amount created %s",
+                                    result_invoice)
+                                if result_invoice["success"] is True:
+                                    invoice_line_item_service =\
+                                        InvoiceLineItemService(user=user)
+                                    result = invoice_line_item_service.create(
+                                        {
+                                            "invoice_id": result_invoice["data"]["id"],
+                                            "code": code,
+                                            "ledger_account": "Cotisant",
+                                            "quantity": quantity,
+                                            "unit_price": family_amount,
+                                            "amount_net": family_amount,
+                                            "amount_total": family_amount,
+                                            "cron_job_code": code
+                                        }
+                                    )
+                                    logger.warning(
+                                        "Invoice line amount_family created %s",
+                                        result)
         return policy
 
     def generate_contribution_receipt(self, product, enroll_date):
