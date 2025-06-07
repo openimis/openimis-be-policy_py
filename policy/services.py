@@ -148,6 +148,8 @@ class PolicyService:
                     if result_signal[0][1]:
                         family_amount = Decimal(result_signal[0][1])
                         logger.warning("family_amount %s ", family_amount)
+                policy.value = family_amount
+                policy.save()
                 logger.warning("date_valid_from of the contribution %s",
                                contribution_plan.date_valid_from)
                 logger.warning("date_valid_to of the contribution %s",
@@ -198,19 +200,19 @@ class PolicyService:
                         date_valid_to = renewal_date - timedelta(days=1)
                         logger.warning("current date_valid_to %s", date_valid_to)
                         quantity = 1
-                        if data["periodicity"]:
-                            if data["periodicity"] == 'Q':
-                                family_amount = family_amount * 3
-                                quantity = 3
-                                government_amount = government_amount * 3
-                            elif data["periodicity"] == 'S':
-                                family_amount = family_amount * 6
-                                quantity = 6
-                                government_amount = government_amount * 6
-                            elif data["periodicity"] == 'Y':
-                                family_amount = family_amount * 12
-                                quantity = 12
-                                government_amount = government_amount * 12
+                        # if data["periodicity"]:
+                        #     if data["periodicity"] == 'Q':
+                        #         family_amount = family_amount * 3
+                        #         quantity = 3
+                        #         government_amount = government_amount * 3
+                        #     elif data["periodicity"] == 'S':
+                        #         family_amount = family_amount * 6
+                        #         quantity = 6
+                        #         government_amount = government_amount * 6
+                        #     elif data["periodicity"] == 'Y':
+                        #         family_amount = family_amount * 12
+                        #         quantity = 12
+                        #         government_amount = government_amount * 12
                         logger.warning("government amount %s ",
                                         government_amount)
                         logger.warning("family amount %s ", family_amount)
