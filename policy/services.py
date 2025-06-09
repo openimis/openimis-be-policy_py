@@ -197,7 +197,10 @@ class PolicyService:
                         if data["payment_day"]:
                             date_due = date_due.replace(day=int(data["payment_day"]))
                             logger.warning("date due updated %s", date_due)
-                        date_valid_to = renewal_date - timedelta(days=1)
+                        date_to = date_due + datetimedelta(
+                            months=periodicity
+                        )
+                        date_valid_to = date_to - timedelta(days=1)
                         logger.warning("current date_valid_to %s", date_valid_to)
                         quantity = 1
                         # if data["periodicity"]:
@@ -222,14 +225,13 @@ class PolicyService:
                         if family.head_insuree:
                             existing_invoices = Invoice.objects.filter(
                                 subject_id=family.head_insuree.id,
-                                date_valid_from__date__gte=date_due.date(),
-                                status__in=[1, 2]
+                                date_valid_from__date__gte=date_due.date()
                             )
                         logger.warning("existing invoices %s ",
                                         existing_invoices)
                         if not existing_invoices:
                             same_code_invoices = Invoice.objects.filter(
-                                code=code
+                                subject_id=family.head_insuree.id
                             )
                             logger.warning("same code invoices %s ",
                                         same_code_invoices)
