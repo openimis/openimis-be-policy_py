@@ -61,11 +61,25 @@ def set_start_date(policy):
 
 def set_expiry_date(policy):
     product = policy.product
+    print("policy: ", policy.periodicity)
     from core import datetime, datetimedelta
+    value = 1
+    if policy.periodicity:
+        if policy.periodicity == 'Q':
+            value = 3
+        if policy.periodicity == 'S':
+            value = 6
+        if policy.periodicity == 'Y':
+            value = 12
+        if policy.periodicity == 'M':
+            value = 1
 
+    # insurance_period = datetimedelta(
+    #     months=product.insurance_period) if product.insurance_period % 12 != 0 else datetimedelta(
+    #     years=product.insurance_period // 12)
     insurance_period = datetimedelta(
-        months=product.insurance_period) if product.insurance_period % 12 != 0 else datetimedelta(
-        years=product.insurance_period // 12)
+        months=value) if value % 12 != 0 else datetimedelta(
+        years=value // 12)
     policy.expiry_date = (
             datetime.date.from_ad_date(policy.start_date) +
             insurance_period -
