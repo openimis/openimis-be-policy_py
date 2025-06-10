@@ -28,6 +28,7 @@ from policy.apps import PolicyConfig
 from policy.utils import MonthsAdd
 
 from .models import Policy, PolicyRenewal
+from dateutil.relativedelta import relativedelta
 
 logger = logging.getLogger(__name__)
 
@@ -1308,6 +1309,19 @@ def policy_status_premium_paid(policy, effective_date):
     if PolicyConfig.activation_option == PolicyConfig.ACTIVATION_OPTION_CONTRIBUTION:
         policy.effective_date = effective_date
         policy.status = Policy.STATUS_ACTIVE
+        
+        # Calcul de la date d'expiration en fonction de la périodicité
+        if policy.periodicity == Policy.MONTHLY:
+            policy.expiry_date = effective_date + relativedelta(months=1)
+        elif policy.periodicity == Policy.QUARTERLY:
+            policy.expiry_date = effective_date + relativedelta(months=3)
+        elif policy.periodicity == Policy.SEMESTER:
+            policy.expiry_date = effective_date + relativedelta(months=6)
+        elif policy.periodicity == Policy.YEARLY:
+            policy.expiry_date = effective_date + relativedelta(years=1)
+        else:
+            policy.expiry_date = effective_date + relativedelta(months=1)
+        
     else:
         policy.status = Policy.STATUS_READY
 

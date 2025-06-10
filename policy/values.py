@@ -236,6 +236,18 @@ def set_value(policy, family, prev_policy, user):
         print("result_signal ", result_signal)
         if result_signal[0][1]:
             policy.value = Decimal(result_signal[0][1])
+            period = 1
+            print("policy.periodicity ", policy.periodicity)
+            if policy.periodicity:
+                if policy.periodicity == 'Q':
+                    period = 3
+                if policy.periodicity == 'S':
+                    period = 6
+                if policy.periodicity == 'Y':
+                    period = 12
+                if policy.periodicity == 'M':
+                    period = 1
+            policy.value = policy.value * period
         else:
             ValidationError(_("policy.mutation.policy_value_error"))
             policy.value = Decimal(0)
