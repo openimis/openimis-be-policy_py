@@ -38,7 +38,8 @@ class Query(graphene.ObjectType):
         enrollDate=graphene.DateTime(required=True),
         product_id=graphene.Int(required=True),
         family_id=graphene.Int(required=True),
-        contribution_plan_uuid = graphene.UUID(required=True)
+        contribution_plan_uuid = graphene.UUID(required=True),
+        periodicity = graphene.String(required=False)
     )
     policies = OrderedDjangoFilterConnectionField(
         PolicyGQLType,
@@ -121,7 +122,8 @@ class Query(graphene.ObjectType):
             enroll_date=kwargs.get('enrollDate'),
             start_date=kwargs.get('enrollDate'),
             product=product,
-            contribution_plan=contribution_plan[0].id
+            contribution_plan=contribution_plan[0].id,
+            periodicity=kwargs.get("periodicity")
         )
         prefetch = Prefetch(
             'members',
