@@ -203,19 +203,19 @@ class PolicyService:
                         date_valid_to = date_to - timedelta(days=1)
                         logger.warning("current date_valid_to %s", date_valid_to)
                         quantity = 1
-                        # if data["periodicity"]:
-                        #     if data["periodicity"] == 'Q':
-                        #         family_amount = family_amount * 3
-                        #         quantity = 3
-                        #         government_amount = government_amount * 3
-                        #     elif data["periodicity"] == 'S':
-                        #         family_amount = family_amount * 6
-                        #         quantity = 6
-                        #         government_amount = government_amount * 6
-                        #     elif data["periodicity"] == 'Y':
-                        #         family_amount = family_amount * 12
-                        #         quantity = 12
-                        #         government_amount = government_amount * 12
+                        if data["periodicity"]:
+                            if data["periodicity"] == 'Q':
+                                family_amount = family_amount * 3
+                                quantity = 3
+                                government_amount = government_amount * 3
+                            elif data["periodicity"] == 'S':
+                                family_amount = family_amount * 6
+                                quantity = 6
+                                government_amount = government_amount * 6
+                            elif data["periodicity"] == 'Y':
+                                family_amount = family_amount * 12
+                                quantity = 12
+                                government_amount = government_amount * 12
                         logger.warning("government amount %s ",
                                         government_amount)
                         logger.warning("family amount %s ", family_amount)
