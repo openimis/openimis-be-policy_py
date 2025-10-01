@@ -266,7 +266,8 @@ class PolicyService:
                         if family.head_insuree:
                             existing_invoices = Invoice.objects.filter(
                                 subject_id=family.head_insuree.id,
-                                date_valid_from__date__gte=date_due.date()
+                                date_valid_from__date__gte=date_due.date(),
+                                is_deleted=False
                             )
                         logger.warning("existing invoices %s ",
                                         existing_invoices)
