@@ -1327,24 +1327,25 @@ HOF{% endif %}
 def update_insuree_policies(policy, audit_user_id):
     print("Membres ", policy.family.members.filter(validity_to__isnull=True))
     for member in policy.family.members.filter(validity_to__isnull=True):
-        existing_ip = InsureePolicy.objects.filter(validity_to__isnull=True, insuree=member, policy=policy).first()
-        if existing_ip:
-            existing_ip.save_history()
-        ip, ip_created = InsureePolicy.objects.filter(validity_to__isnull=True).update_or_create(
-            insuree=member, policy=policy,
-            defaults=dict(
-                enrollment_date=policy.enroll_date,
-                start_date=policy.start_date,
-                effective_date=policy.effective_date,
-                expiry_date=policy.expiry_date,
-                offline=policy.offline,
-                audit_user_id=audit_user_id
+        if member.head:
+            existing_ip = InsureePolicy.objects.filter(validity_to__isnull=True, insuree=member, policy=policy).first()
+            if existing_ip:
+                existing_ip.save_history()
+            ip, ip_created = InsureePolicy.objects.filter(validity_to__isnull=True).update_or_create(
+                insuree=member, policy=policy,
+                defaults=dict(
+                    enrollment_date=policy.enroll_date,
+                    start_date=policy.start_date,
+                    effective_date=policy.effective_date,
+                    expiry_date=policy.expiry_date,
+                    offline=policy.offline,
+                    audit_user_id=audit_user_id
+                )
             )
-        )
-        if ip_created:
-            logger.debug("Created InsureePolicy(%s) %s - %s", ip.id, member.chf_id, policy.uuid)
-        else:
-            logger.debug("Updated InsureePolicy(%s) %s - %s", ip.id, member.chf_id, policy.uuid)
+            if ip_created:
+                logger.debug("Created InsureePolicy(%s) %s - %s", ip.id, member.chf_id, policy.uuid)
+            else:
+                logger.debug("Updated InsureePolicy(%s) %s - %s", ip.id, member.chf_id, policy.uuid)
 
 
 def policy_status_premium_paid(policy, effective_date):
