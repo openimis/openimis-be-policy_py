@@ -191,9 +191,9 @@ class PolicyService:
                 if data["periodicity"]:
                     if data["periodicity"] == 'Q':
                         policy_amount = policy_amount * 3
-                    elif data["periodicity"] == 'S':
+                    if data["periodicity"] == 'S':
                         policy_amount = policy_amount * 6
-                    elif data["periodicity"] == 'Y':
+                    if data["periodicity"] == 'Y':
                         policy_amount = policy_amount * 12
                 policy.value = policy_amount
                 if family_amount == 0:
