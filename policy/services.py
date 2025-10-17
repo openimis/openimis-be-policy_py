@@ -51,7 +51,7 @@ class PolicyService:
         self.user = user
 
     @register_service_signal('policy_service.create_or_update')
-    def update_or_create(self, data, user): 
+    def update_or_create(self, data, user, is_imported=False):
         if isinstance(data['enroll_date'], str):
             data['enroll_date'] = py_datetime.strptime(data['enroll_date'], "%Y-%m-%d").date()
         if isinstance(data.get('signature_date'), str):
@@ -107,14 +107,15 @@ class PolicyService:
                 raise ValidationError({
                     "periodicity": _("policy.periodicity_below_min_for_plan")
                 })
-            
+
         if policy_uuid:
-            return self.update_policy(data, user)
+            return self.update_policy(data, user, is_imported)
         else:
-            return self.create_policy(data, user)
+            return self.create_policy(data, user, is_imported)
 
     @register_service_signal('policy_service.update')
-    def update_policy(self, data, user):
+    def update_policy(self, data, user, is_imported=False):
+        logger.warning("Update: is imported %s", is_imported)
         logger.warning("Data to update %s", data)
         if "is_paid" in data:
             data.pop("is_paid")
@@ -124,7 +125,7 @@ class PolicyService:
         logger.warning("Update: Config for invoice generation %s",
                     PolicyConfig.generate_invoice_on_policy)
         if PolicyConfig.generate_invoice_on_policy and\
-            data.get("signature_date", False):
+            data.get("signature_date", False) and not is_imported:
             logger.warning(
                 "Old value of signature date %s", policy.signature_date)
             if not policy.signature_date:
@@ -137,7 +138,8 @@ class PolicyService:
         return policy
 
     @register_service_signal('policy_service.create')
-    def create_policy(self, data, user):
+    def create_policy(self, data, user, is_imported=False):
+        logger.warning("Create: is imported %s", is_imported)
         is_paid = data.pop("is_paid", False)
         receipt = data.pop("receipt", None)
         payer_uuid = data.pop("payer_uuid", None)
@@ -161,9 +163,12 @@ class PolicyService:
             premium_action(premium_data, user)
         logger.warning("Config for invoice generation %s",
                     PolicyConfig.generate_invoice_on_policy)
-        if PolicyConfig.generate_invoice_on_policy and\
-            data.get("signature_date", False):
-            self.create_invoice(data, user, policy)
+        if PolicyConfig.generate_invoice_on_policy:
+            if is_imported:
+                self.create_invoice(data, user, policy)
+            if not is_imported:
+                if data.get("signature_date", False):
+                    self.create_invoice(data, user, policy)
         return policy
 
     def create_invoice(self, data, user, policy):
