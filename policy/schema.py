@@ -97,16 +97,16 @@ class Query(graphene.ObjectType):
         region=graphene.String(),
     )
 
-    # update_wrong_policy_values = OrderedDjangoFilterConnectionField(
-    #     PolicyAndWarningsGQLType,
-    #     prev_uuid=graphene.String(required=False),
-    #     stage=graphene.String(required=True),
-    #     enrollDate=graphene.DateTime(required=True),
-    #     product_id=graphene.Int(required=True),
-    #     family_id=graphene.Int(required=True),
-    #     contribution_plan_uuid = graphene.UUID(required=True),
-    #     periodicity = graphene.String(required=False)
-    # )
+    update_wrong_policy_values = graphene.Field(
+        PolicyAndWarningsGQLType,
+        prev_uuid=graphene.String(required=False),
+        stage=graphene.String(required=True),
+        enrollDate=graphene.DateTime(required=True),
+        product_id=graphene.Int(required=True),
+        family_id=graphene.Int(required=True),
+        contribution_plan_uuid = graphene.UUID(required=True),
+        periodicity = graphene.String(required=False)
+    )
 
     def resolve_update_wrong_policy_values(self, info, **kwargs):
         # all_policies = Policy.objects.filter(validity_to__isnull=True)
