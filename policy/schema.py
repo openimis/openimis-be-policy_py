@@ -112,6 +112,7 @@ class Query(graphene.ObjectType):
         """
         Recompute policies value and correct bad values
         """
+        corrected_policies = 0
         print("kwargs ", kwargs)
         all_policies = Policy.objects.filter(validity_to__isnull=True)[:50]
         # all_policies = Policy.objects.filter(
@@ -154,10 +155,10 @@ class Query(graphene.ObjectType):
                         prev_policy = Policy.objects.get(
                             uuid=kwargs.get('prev_uuid')
                         )
-                    policy, warnings = policy_values(
+                    policy2, warnings = policy_values(
                         policyl, family, prev_policy, info.context.user
                     )
-                    new_value = policy.value
+                    new_value = policy2.value
                     print(
                         "compare old value: ",
                         old_value, " and new value ", new_value
@@ -166,6 +167,10 @@ class Query(graphene.ObjectType):
                         print("OK.......")
                     if old_value != new_value:
                         print("NON OK-------")
+                        corrected_policies += 1
+                        # policy.value = new_value
+                        # policy.save()
+        print("****ENDED with corrected policies ", corrected_policies)
 
     def resolve_policy_values(self, info, **kwargs):
         if not info.context.user.has_perms(PolicyConfig.gql_query_policies_perms):
