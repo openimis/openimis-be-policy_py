@@ -97,6 +97,28 @@ class Query(graphene.ObjectType):
         region=graphene.String(),
     )
 
+    update_wrong_policy_values = DjangoFilterConnectionField(
+        PolicyAndWarningsGQLType,
+        prev_uuid=graphene.String(required=False),
+        stage=graphene.String(required=True),
+        enrollDate=graphene.DateTime(required=True),
+        product_id=graphene.Int(required=True),
+        family_id=graphene.Int(required=True),
+        contribution_plan_uuid = graphene.UUID(required=True),
+        periodicity = graphene.String(required=False)
+    )
+
+    def resolve_update_wrong_policy_values(self, info, **kwargs):
+        # all_policies = Policy.objects.filter(validity_to__isnull=True)
+        all_policies = Policy.objects.filter(
+            uuid="ef5b46df-a990-4ab9-af94-0fc62c771db2")
+        print(len(all_policies))
+        for policy in all_policies:
+            old_value = policy.value
+            new_value = self.resolve_policy_values(info=info, kwargs=kwargs)
+            print(
+                "compare old value ", old_value, " and new value ", new_value)
+
     def resolve_policy_values(self, info, **kwargs):
         if not info.context.user.has_perms(PolicyConfig.gql_query_policies_perms):
             raise PermissionDenied(_("unauthorized"))
