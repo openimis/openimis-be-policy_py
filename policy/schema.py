@@ -128,7 +128,7 @@ class Query(graphene.ObjectType):
             if contribution_plan:
                 product = Product.objects.filter(
                     id=policy.product.id
-                )
+                ).first()
                 print("product ", product)
 
                 if product:
