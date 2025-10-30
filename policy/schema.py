@@ -148,7 +148,7 @@ class Query(graphene.ObjectType):
                     )
                     family = Family.objects \
                         .prefetch_related(prefetch) \
-                        .get(id=kwargs.get('family_id'))
+                        .get(id=policy.family.id)
                     prev_policy = None
                     if 'prev_uuid' in kwargs:
                         prev_policy = Policy.objects.get(
