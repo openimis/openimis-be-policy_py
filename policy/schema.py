@@ -109,17 +109,62 @@ class Query(graphene.ObjectType):
     )
 
     def resolve_update_wrong_policy_values(self, info, **kwargs):
+        """
+        Recompute policies value and correct bad values
+        """
+        print("kwargs ", kwargs)
         # all_policies = Policy.objects.filter(validity_to__isnull=True)
         all_policies = Policy.objects.filter(
             uuid="ef5b46df-a990-4ab9-af94-0fc62c771db2")
         print(len(all_policies))
         for policy in all_policies:
             old_value = policy.value
-            new_value = Query.resolve_policy_values(
-                self=self, info=info, kwargs=kwargs
+            contribution_plan = ContributionPlan.objects.filter(
+                uuid=str(
+                    policy.contribution_plan
+                )
             )
-            print(
-                "compare old value: ", old_value, " and new value ", new_value)
+            print("contribution_plan ", contribution_plan)
+            if contribution_plan:
+                product = Product.objects.filter(
+                    id=policy.product
+                )
+                print("product ", product)
+
+                if product:
+                    policy = PolicyGQLType(
+                        stage=policy.stage,
+                        enroll_date=policy.enroll_date,
+                        start_date=policy.start_date,
+                        product=product,
+                        contribution_plan=contribution_plan[0].id,
+                        periodicity=policy.periodicity
+                    )
+                    prefetch = Prefetch(
+                        'members',
+                        queryset=Insuree.objects.filter(
+                            validity_to__isnull=True).order_by('validity_from')
+                    )
+                    family = Family.objects \
+                        .prefetch_related(prefetch) \
+                        .get(id=kwargs.get('family_id'))
+                    prev_policy = None
+                    if 'prev_uuid' in kwargs:
+                        prev_policy = Policy.objects.get(
+                            uuid=kwargs.get('prev_uuid')
+                        )
+                    policy, warnings = policy_values(
+                        policy, family, prev_policy, info.context.user
+                    )
+                    new_value = policy.value
+                    print(
+                        "compare old value: ",
+                        old_value, " and new value ", new_value
+                    )
+                    if old_value == new_value:
+                        print("OK.......")
+                    if old_value == new_value:
+                        print("NON OK-------")
 
     def resolve_policy_values(self, info, **kwargs):
         if not info.context.user.has_perms(PolicyConfig.gql_query_policies_perms):
