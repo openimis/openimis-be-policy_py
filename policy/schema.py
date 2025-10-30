@@ -97,7 +97,7 @@ class Query(graphene.ObjectType):
         region=graphene.String(),
     )
 
-    update_wrong_policy_values = DjangoFilterConnectionField(
+    update_wrong_policy_values = OrderedDjangoFilterConnectionField(
         PolicyAndWarningsGQLType,
         prev_uuid=graphene.String(required=False),
         stage=graphene.String(required=True),
