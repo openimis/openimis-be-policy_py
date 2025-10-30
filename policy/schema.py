@@ -115,9 +115,11 @@ class Query(graphene.ObjectType):
         print(len(all_policies))
         for policy in all_policies:
             old_value = policy.value
-            new_value = self.resolve_policy_values(info=info, kwargs=kwargs)
+            new_value = Query.resolve_policy_values(
+                self=self, info=info, kwargs=kwargs
+            )
             print(
-                "compare old value ", old_value, " and new value ", new_value)
+                "compare old value: ", old_value, " and new value ", new_value)
 
     def resolve_policy_values(self, info, **kwargs):
         if not info.context.user.has_perms(PolicyConfig.gql_query_policies_perms):
