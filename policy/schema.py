@@ -121,7 +121,7 @@ class Query(graphene.ObjectType):
             old_value = policy.value
             contribution_plan = ContributionPlan.objects.filter(
                 uuid=str(
-                    policy.contribution_plan
+                    policy.contribution_plan.uuid
                 )
             )
             print("contribution_plan ", contribution_plan)
