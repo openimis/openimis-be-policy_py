@@ -132,7 +132,7 @@ class Query(graphene.ObjectType):
                 print("product ", product)
 
                 if product:
-                    policy = PolicyGQLType(
+                    policyl = PolicyGQLType(
                         stage=policy.stage,
                         enroll_date=policy.enroll_date,
                         start_date=policy.start_date,
@@ -154,7 +154,7 @@ class Query(graphene.ObjectType):
                             uuid=kwargs.get('prev_uuid')
                         )
                     policy, warnings = policy_values(
-                        policy, family, prev_policy, info.context.user
+                        policyl, family, prev_policy, info.context.user
                     )
                     new_value = policy.value
                     print(
