@@ -127,7 +127,7 @@ class Query(graphene.ObjectType):
             print("contribution_plan ", contribution_plan)
             if contribution_plan:
                 product = Product.objects.filter(
-                    id=policy.product
+                    id=policy.product.id
                 )
                 print("product ", product)
 
