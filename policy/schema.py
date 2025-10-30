@@ -114,9 +114,7 @@ class Query(graphene.ObjectType):
         """
         corrected_policies = 0
         print("kwargs ", kwargs)
-        all_policies = Policy.objects.filter(validity_to__isnull=True)[:50]
-        # all_policies = Policy.objects.filter(
-        #     uuid="ef5b46df-a990-4ab9-af94-0fc62c771db2")
+        all_policies = Policy.objects.filter(validity_to__isnull=True)
         print(len(all_policies))
         for policy in all_policies:
             print("Family ", policy.family.uuid)
