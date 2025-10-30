@@ -113,11 +113,12 @@ class Query(graphene.ObjectType):
         Recompute policies value and correct bad values
         """
         print("kwargs ", kwargs)
-        all_policies = Policy.objects.filter(validity_to__isnull=True)
+        all_policies = Policy.objects.filter(validity_to__isnull=True)[:50]
         # all_policies = Policy.objects.filter(
         #     uuid="ef5b46df-a990-4ab9-af94-0fc62c771db2")
         print(len(all_policies))
         for policy in all_policies:
+            print("Family ", policy.family.uuid)
             old_value = policy.value
             contribution_plan = ContributionPlan.objects.filter(
                 uuid=str(
