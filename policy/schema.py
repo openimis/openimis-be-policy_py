@@ -113,9 +113,9 @@ class Query(graphene.ObjectType):
         Recompute policies value and correct bad values
         """
         print("kwargs ", kwargs)
-        # all_policies = Policy.objects.filter(validity_to__isnull=True)
-        all_policies = Policy.objects.filter(
-            uuid="ef5b46df-a990-4ab9-af94-0fc62c771db2")
+        all_policies = Policy.objects.filter(validity_to__isnull=True)
+        # all_policies = Policy.objects.filter(
+        #     uuid="ef5b46df-a990-4ab9-af94-0fc62c771db2")
         print(len(all_policies))
         for policy in all_policies:
             old_value = policy.value
@@ -163,7 +163,7 @@ class Query(graphene.ObjectType):
                     )
                     if old_value == new_value:
                         print("OK.......")
-                    if old_value == new_value:
+                    if old_value != new_value:
                         print("NON OK-------")
 
     def resolve_policy_values(self, info, **kwargs):
