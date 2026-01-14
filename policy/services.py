@@ -3,6 +3,7 @@ from dataclasses import dataclass
 from datetime import timedelta, datetime as py_datetime, date as py_date
 
 import core
+import calendar
 from claim.models import ClaimService, Claim, ClaimItem
 from django import dispatch
 from django.core.exceptions import PermissionDenied, ValidationError
@@ -272,9 +273,33 @@ class PolicyService:
                     else:
                         chf_id = family.id
                     code = str(chf_id) + str(today.year) + str(today.month)
-                    date_due = today + datetimedelta(
-                        months=1
-                    )
+                    payment_day = 5 #5 par défaut
+                    if data["payment_day"]:
+                        payment_day = int(data["payment_day"])
+                    # Déterminer l'année et le mois
+                    if payment_day < today.day:
+                        # Mois suivant
+                        if today.month == 12:
+                            year = today.year + 1
+                            month = 1
+                        else:
+                            year = today.year
+                            month = today.month + 1
+                    else:
+                        # Mois courant
+                        year = today.year
+                        month = today.month
+
+                    # Vérifier si le jour existe dans ce mois
+                    days_in_month = calendar.monthrange(year, month)[1]
+
+                    if payment_day > days_in_month:
+                        # Le jour n'existe pas dans ce mois
+                        # prendre le dernier jour du mois
+                        day = days_in_month
+                    else:
+                        day = payment_day
+                    date_due = py_date(year, month, day)
                     logger.warning("date due %s", date_due)
                     if data["payment_day"]:
                         date_due = date_due.replace(day=int(data["payment_day"]))
