@@ -88,7 +88,8 @@ def create_test_policy2(
         insuree_policy = None
     # Was added for OMT-333 but breaks tests that explicitly call policy_values
     policy, warnings = policy_values(
-        policy, insuree.family, None, user, members=[insuree]
+        policy, insuree.family, None, user,
+        datetime.datetime.strptime("2024-02-13", "%Y-%m-%d"), members=[insuree]
     )
     if check and warnings:
         raise Exception("Policy has warnings: {}".format(warnings))

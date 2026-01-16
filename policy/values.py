@@ -62,8 +62,18 @@ def set_start_date(policy):
     )
 
 
-def set_expiry_date(policy):
+def set_expiry_date(policy, family, enroll_date):
+    member = family.members.filter(validity_to__isnull=True).first()
+    date_format = "%Y-%m-%d"
+    today = py_datetime.datetime.strptime(str(py_datetime.datetime.now().date()), date_format)
+    insuree_dob = py_datetime.datetime.strptime(str(member.dob), date_format)
+    delta = today - insuree_dob
+    age_patient = int(round(delta.days / 365.0))
+    
     product = policy.product
+    the_date = py_datetime.datetime.strptime(
+        str(enroll_date.date()), "%Y-%m-%d").date()
+    
     from core import datetime, datetimedelta
 
     insurance_period = (
@@ -76,6 +86,13 @@ def set_expiry_date(policy):
         + insurance_period
         - datetimedelta(days=1)
     ).to_ad_date()
+    if product.age_maximal:
+        diff = product.age_maximal - age_patient
+        if(diff < 0):
+            diff = -diff
+        from dateutil.relativedelta import relativedelta
+        exp_date = the_date + relativedelta(years=+diff)
+        policy.expiry_date = exp_date
 
 
 def count_member(members, majority_date, not_related=False, older=True):
@@ -263,7 +280,7 @@ def set_legacy_policy_value(product, policy, prev_policy, f_counts):
     discount(policy, prev_policy)
 
 
-def policy_values(policy, family, prev_policy, user, members=None):
+def policy_values(policy, family, prev_policy, user, enroll_date, members=None):
     members = get_members(policy, family, user, members)
     max_members = policy.product.max_members
     above_max = max(0, len(members or []) - max_members)
@@ -274,6 +291,6 @@ def policy_values(policy, family, prev_policy, user, members=None):
             % {"max": max_members, "count": len(members)}
         )
     set_start_date(policy)
-    set_expiry_date(policy)
+    set_expiry_date(policy, family, enroll_date)
     set_value(policy, members, prev_policy, user)
     return policy, warnings

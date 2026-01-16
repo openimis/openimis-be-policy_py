@@ -25,7 +25,7 @@ from insuree.services import create_insuree_renewal_detail
 from medical.models import Service, Item
 from policy.apps import PolicyConfig
 from policy.utils import MonthsAdd, get_members
-
+from product.models import Product
 from .models import Policy, PolicyRenewal
 
 logger = logging.getLogger(__name__)
@@ -69,6 +69,26 @@ class PolicyService:
 
     @register_service_signal("policy_service.create_or_update")
     def update_or_create(self, data, user):
+        familyid = data.get('family_id', None)
+        insurees = Insuree.objects.filter(family=familyid)
+        product_id = data.get('product_id', None)
+        if insurees and product_id:
+            for member in insurees:
+                date_format = "%Y-%m-%d"
+                today = py_datetime.strptime(str(py_datetime.now().date()), date_format)
+                insuree_dob = py_datetime.strptime(str(member.dob), date_format)
+                delta = today - insuree_dob
+                age_patient = int(round(delta.days / 365.0))
+                product = Product.objects.get(id=product_id)
+                if product.age_minimal:
+                    if(age_patient < product.age_minimal):
+                        # The insuree's age is lower than the min age
+                        raise Exception("policy.min_age_not_reached")
+                if product.age_maximal:
+                    diff = product.age_maximal - age_patient
+                    if(diff < 0):
+                        # The insuree's age is greater than the max age
+                        raise Exception("policy.max_age_has_passed")
         if isinstance(data["enroll_date"], str):
             data["enroll_date"] = py_datetime.strptime(
                 data["enroll_date"], "%Y-%m-%d"
