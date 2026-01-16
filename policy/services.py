@@ -59,43 +59,23 @@ def calculate_due_date(today: py_date, payment_day: int, period: int) -> py_date
     Returns:
         Prochaine date d'échéance
     """
-    # Si la période est > 1 mois, on ne compare pas avec today.day
-    if period > 1:
-        # Pour les périodes > 1 mois, on prend toujours le payment_day
-        # du mois approprié selon la période
+    # Calculer depuis une date de référence (première échéance)
+    # Ici on suppose qu'on part de today, mais vous pourriez avoir
+    # une date de début
+    reference_date = today.replace(day=1) # Premier du mois comme référence
 
-        # Calculer depuis une date de référence (première échéance)
-        # Ici on suppose qu'on part de today, mais vous pourriez avoir
-        # une date de début
-        reference_date = today.replace(day=1) # Premier du mois comme référence
+    # Trouver le prochain multiple de la période
+    months_from_reference = 0
+    temp_date = reference_date
 
-        # Trouver le prochain multiple de la période
-        months_from_reference = 0
-        temp_date = reference_date
+    while temp_date <= today:
+        temp_date = reference_date + relativedelta(
+            months=months_from_reference)
+        months_from_reference += period
 
-        while temp_date <= today:
-            temp_date = reference_date + relativedelta(
-                months=months_from_reference)
-            months_from_reference += period
-
-        # Maintenant temp_date est la prochaine date de période
-        year = temp_date.year
-        month = temp_date.month
-
-    else:
-        # Période mensuelle (logique originale)
-        if payment_day < today.day:
-            # Mois suivant
-            if today.month == 12:
-                year = today.year + 1
-                month = 1
-            else:
-                year = today.year
-                month = today.month + 1
-        else:
-            # Mois courant
-            year = today.year
-            month = today.month
+    # Maintenant temp_date est la prochaine date de période
+    year = temp_date.year
+    month = temp_date.month
 
     # Ajuster le jour si nécessaire
     days_in_month = calendar.monthrange(year, month)[1]
