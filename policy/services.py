@@ -46,6 +46,62 @@ def reset_policy_before_update(policy):
     policy.periodicity = None
     policy.payment_day = None
 
+def calculate_due_date(today: py_date, payment_day: int, period: int) -> py_date:
+    """
+    Calcule la prochaine date d'échéance en tenant compte de la période.
+    
+    Args:
+        today: Date actuelle
+        payment_day: Jour de paiement souhaité (1-31)
+        period: Période en mois
+        (1=mensuel, 3=trimestriel, 6=semestriel, 12=annuel)
+    
+    Returns:
+        Prochaine date d'échéance
+    """
+    # Si la période est > 1 mois, on ne compare pas avec today.day
+    if period > 1:
+        # Pour les périodes > 1 mois, on prend toujours le payment_day
+        # du mois approprié selon la période
+
+        # Calculer depuis une date de référence (première échéance)
+        # Ici on suppose qu'on part de today, mais vous pourriez avoir
+        # une date de début
+        reference_date = today.replace(day=1) # Premier du mois comme référence
+
+        # Trouver le prochain multiple de la période
+        months_from_reference = 0
+        temp_date = reference_date
+
+        while temp_date <= today:
+            temp_date = reference_date + relativedelta(
+                months=months_from_reference)
+            months_from_reference += period
+
+        # Maintenant temp_date est la prochaine date de période
+        year = temp_date.year
+        month = temp_date.month
+
+    else:
+        # Période mensuelle (logique originale)
+        if payment_day < today.day:
+            # Mois suivant
+            if today.month == 12:
+                year = today.year + 1
+                month = 1
+            else:
+                year = today.year
+                month = today.month + 1
+        else:
+            # Mois courant
+            year = today.year
+            month = today.month
+
+    # Ajuster le jour si nécessaire
+    days_in_month = calendar.monthrange(year, month)[1]
+    day = min(payment_day, days_in_month)
+
+    return py_date(year, month, day)
 
 class PolicyService:
     def __init__(self, user):
@@ -276,30 +332,8 @@ class PolicyService:
                     payment_day = 5 #5 par défaut
                     if data["payment_day"]:
                         payment_day = int(data["payment_day"])
-                    # Déterminer l'année et le mois
-                    if payment_day < today.day:
-                        # Mois suivant
-                        if today.month == 12:
-                            year = today.year + 1
-                            month = 1
-                        else:
-                            year = today.year
-                            month = today.month + 1
-                    else:
-                        # Mois courant
-                        year = today.year
-                        month = today.month
-
-                    # Vérifier si le jour existe dans ce mois
-                    days_in_month = calendar.monthrange(year, month)[1]
-
-                    if payment_day > days_in_month:
-                        # Le jour n'existe pas dans ce mois
-                        # prendre le dernier jour du mois
-                        day = days_in_month
-                    else:
-                        day = payment_day
-                    date_due = py_date(year, month, day)
+                    date_due = calculate_due_date(
+                        today.date(), payment_day, periodicity)
                     logger.warning("date due %s", date_due)
                     if data["payment_day"]:
                         date_due = date_due.replace(day=int(data["payment_day"]))
