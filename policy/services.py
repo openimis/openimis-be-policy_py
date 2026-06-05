@@ -1,8 +1,9 @@
 import logging
 from dataclasses import dataclass
-from datetime import datetime as py_datetime, date as py_date
+from datetime import timedelta, datetime as py_datetime, date as py_date
 
 import core
+import calendar
 from claim.models import ClaimService, Claim, ClaimItem
 from django import dispatch
 from django.core.exceptions import PermissionDenied, ValidationError
@@ -12,7 +13,13 @@ from django.db.models.functions import Coalesce
 from django.template import Template, Context
 from django.utils.translation import gettext as _
 from graphene.utils.str_converters import to_snake_case
-
+from invoice.services import InvoiceService
+from invoice.services.invoiceLineItem import InvoiceLineItemService
+from invoice.models import Invoice
+from .apps import CALCULATION_RULES
+from contribution_plan.models import ContributionPlan
+from decimal import Decimal
+from core.datetimes.shared import datetimedelta
 from policy.utils import get_queryset_valid_at_date
 from core.signals import register_service_signal
 from insuree.models import Insuree, Family, InsureePolicy
@@ -22,6 +29,8 @@ from policy.apps import PolicyConfig
 from policy.utils import MonthsAdd
 
 from .models import Policy, PolicyRenewal
+from dateutil.relativedelta import relativedelta
+from policyholder.models import PolicyHolder
 
 logger = logging.getLogger(__name__)
 
@@ -34,31 +43,126 @@ def reset_policy_before_update(policy):
     policy.product_id = None
     policy.family_id = None
     policy.officer_id = None
+    policy.signature_date = None
+    policy.periodicity = None
+    policy.payment_day = None
 
+def calculate_due_date(today: py_date, payment_day: int) -> py_date:
+    """
+    Calcule la prochaine date d'échéance en tenant compte de la période.
+    
+    Args:
+        today: Date actuelle
+        payment_day: Jour de paiement souhaité (1-31)
+        period: Période en mois
+        (1=mensuel, 3=trimestriel, 6=semestriel, 12=annuel)
+    
+    Returns:
+        Prochaine date d'échéance
+    """
+    if payment_day < today.day:
+        # Mois suivant
+        if today.month == 12:
+            year = today.year + 1
+            month = 1
+        else:
+            year = today.year
+            month = today.month + 1
+    else:
+        # Mois courant
+        year = today.year
+        month = today.month
+
+    # Ajuster le jour si nécessaire
+    days_in_month = calendar.monthrange(year, month)[1]
+    day = min(payment_day, days_in_month)
+
+    return py_date(year, month, day)
 
 class PolicyService:
     def __init__(self, user):
         self.user = user
 
     @register_service_signal('policy_service.create_or_update')
-    def update_or_create(self, data, user): 
+    def update_or_create(self, data, user, is_imported=False):
         if isinstance(data['enroll_date'], str):
             data['enroll_date'] = py_datetime.strptime(data['enroll_date'], "%Y-%m-%d").date()
+        if isinstance(data.get('signature_date'), str):
+            data['signature_date'] = py_datetime.strptime(data['signature_date'], "%Y-%m-%d").date()
         policy_uuid = data.get('uuid', None)
         if 'enroll_date' in data and data['enroll_date'] > py_date.today():
             raise ValidationError("policy.enroll_date_in_the_future")
+        if PolicyConfig.is_signature_enabled and data.get('signature_date') and data.get('enroll_date'):
+            if data['signature_date'] < data['enroll_date']:
+                raise ValidationError("policy.signature_date_before_enroll_date")
+        if data.get('signature_date') and not data.get('periodicity'):
+            raise ValidationError({
+                'periodicity': "policy.periodicity_required_if_signed"
+            })
+        if data.get('signature_date') and not data.get('payment_day'):
+            raise ValidationError({
+                'payment_day': "policy.payment_day_required_if_signed"
+            })
+            
+        # Codes périodicité minimale requise
+        MIN_PERIODICITY_BY_PLAN_CODE = {
+            "AMOG": "M",
+            "AMOE": "M",
+            "AMOS": "M",
+            "AMOS1": "M",
+            "AMOS2": "M",
+            "AMOS3": "M",
+            "AMOS4": "M",
+            "AMS": "Y",
+        }
+        
+        PERIODICITY_ORDER = { "M": 1, "Q": 2, "S": 3, "Y": 4 }
+
+        plan_id = data.get("contribution_plan_id")
+
+        if plan_id:
+            try:
+                plan = ContributionPlan.objects.get(id=plan_id, is_deleted=False)
+            except ContributionPlan.DoesNotExist:
+                raise ValidationError(_("policy.invalid_contribution_plan"))
+
+            plan_code = plan.code
+            required_periodicity = MIN_PERIODICITY_BY_PLAN_CODE.get(plan_code)
+
+            if not required_periodicity:
+                raise ValidationError(_("policy.unknown_required_periodicity_for_plan") % {"code": plan_code})
+
+            policy_periodicity = data.get("periodicity")
+            if not policy_periodicity:
+                raise ValidationError({"periodicity": _("policy.periodicity_required")})
+
+            if (PERIODICITY_ORDER.get(policy_periodicity) or 0) < (PERIODICITY_ORDER.get(required_periodicity) or 0):
+                raise ValidationError({
+                    "periodicity": _("policy.periodicity_below_min_for_plan")
+                })
+
         if policy_uuid:
-            return self.update_policy(data, user)
+            return self.update_policy(data, user, is_imported)
         else:
-            return self.create_policy(data, user)
+            return self.create_policy(data, user, is_imported)
 
     @register_service_signal('policy_service.update')
-    def update_policy(self, data, user):
+    def update_policy(self, data, user, is_imported=False):
+        logger.warning("Update: is imported %s", is_imported)
+        logger.warning("Data to update %s", data)
         if "is_paid" in data:
             data.pop("is_paid")
         data = self._clean_mutation_info(data)
         policy_uuid = data.pop('uuid') if 'uuid' in data else None
         policy = Policy.objects.get(uuid=policy_uuid)
+        logger.warning("Update: Config for invoice generation %s",
+                    PolicyConfig.generate_invoice_on_policy)
+        if PolicyConfig.generate_invoice_on_policy and\
+            data.get("signature_date", False) and not is_imported:
+            logger.warning(
+                "Old value of signature date %s", policy.signature_date)
+            if not policy.signature_date:
+                self.create_invoice(data, user, policy)
         policy.save_history()
         reset_policy_before_update(policy)
         [setattr(policy, key, data[key]) for key in data]
@@ -67,7 +171,8 @@ class PolicyService:
         return policy
 
     @register_service_signal('policy_service.create')
-    def create_policy(self, data, user):
+    def create_policy(self, data, user, is_imported=False):
+        logger.warning("Create: is imported %s", is_imported)
         is_paid = data.pop("is_paid", False)
         receipt = data.pop("receipt", None)
         payer_uuid = data.pop("payer_uuid", None)
@@ -80,6 +185,12 @@ class PolicyService:
                 raise ValidationError("Receipt already exist for a given product.")
         else:
             receipt = self.generate_contribution_receipt(policy.product, policy.enroll_date)
+        # If a policy has a value of 0 it means that this policy is free
+        # we activate the policy immediatelly
+        print("value is ", data['value'])
+        if int(data['value']) == 0:
+            setattr(policy, "status",2)
+            setattr(policy, "effective_date", data['start_date'])
         policy.save()
         update_insuree_policies(policy, user.id_for_audit)
         if is_paid:
@@ -89,7 +200,265 @@ class PolicyService:
             if payer_uuid is not None:
                 premium_data["payer_uuid"] = payer_uuid
             premium_action(premium_data, user)
+        logger.warning("Config for invoice generation %s",
+                    PolicyConfig.generate_invoice_on_policy)
+        if PolicyConfig.generate_invoice_on_policy:
+            if is_imported:
+                self.create_invoice(data, user, policy)
+            if not is_imported:
+                if data.get("signature_date", False):
+                    self.create_invoice(data, user, policy)
         return policy
+
+    def create_invoice(self, data, user, policy):
+        """
+        This function creates invoice for head insuree
+
+        Parameters:
+        self: An instance of PolicyService
+        data: Data of the policy
+        user: User logged in
+        """
+        family = Family.objects.filter(id=data["family_id"]).first()
+        family_amount = 0
+        government_amount = 0
+        contribution_plan = ContributionPlan.objects.filter(
+            uuid=str(
+                data["contribution_plan_id"]
+            )
+        )
+        contribution_plan = contribution_plan[0]
+        if contribution_plan:
+            for calculation_rule in CALCULATION_RULES:
+                # get calculation_rule amount for government
+                result_signal = calculation_rule.signal_calculate_event.send(
+                    sender=contribution_plan.__class__.__name__, instance=contribution_plan,
+                    user=user, context="create",
+                    family=family,
+                    is_government_value=True
+                )
+                logger.warning("result_signal %s ", result_signal)
+                if result_signal[0][1]:
+                    government_amount = Decimal(result_signal[0][1])
+                    logger.warning("government_amount %s ", government_amount)
+
+                # get calculation_rule for familly
+                result_signal = calculation_rule.signal_calculate_event.send(
+                    sender=contribution_plan.__class__.__name__, instance=contribution_plan,
+                    user=user, context="create",
+                    family=family,
+                    is_government_value=False
+                )
+                logger.warning("result_signal2 %s ", result_signal)
+                if result_signal[0][1]:
+                    family_amount = Decimal(result_signal[0][1])
+                    logger.warning("family_amount %s ", family_amount)
+            policy_amount = family_amount
+            if data["periodicity"]:
+                if data["periodicity"] == 'Q':
+                    policy_amount = policy_amount * 3
+                if data["periodicity"] == 'S':
+                    policy_amount = policy_amount * 6
+                if data["periodicity"] == 'Y':
+                    policy_amount = policy_amount * 12
+            policy.value = policy_amount
+            if family_amount == 0:
+                policy.status = Policy.STATUS_ACTIVE
+            policy.save()
+            logger.warning("date_valid_from of the contribution %s",
+                            contribution_plan.date_valid_from)
+            logger.warning("date_valid_to of the contribution %s",
+                            contribution_plan.date_valid_to)
+            today = py_datetime.now()
+            generate = False
+            if today > contribution_plan.date_valid_from:
+                if contribution_plan.date_valid_to:
+                    if contribution_plan.date_valid_to > today:
+                        generate = True
+                else:
+                    # Validity to is null
+                    generate = True
+            if generate:
+                periodicity = 12
+                if data["periodicity"]:
+                    if data["periodicity"] == 'Q':
+                        periodicity = 3
+                    elif data["periodicity"] == 'S':
+                        periodicity = 6
+                    elif data["periodicity"] == 'M':
+                        periodicity = 1
+                renewal_date = today + datetimedelta(
+                    months=periodicity
+                )
+                logger.warning("renewal date %s", renewal_date)
+                ok = False
+                if not contribution_plan.date_valid_to:
+                    ok = True
+                else:
+                    if renewal_date < contribution_plan.\
+                        date_valid_to:
+                        ok = True
+                if ok:
+                    logger.warning("Family %s", family.id)
+                    if family.head_insuree:
+                        chf_id = family.head_insuree.chf_id
+                    else:
+                        chf_id = family.id
+                    code = str(chf_id) + str(today.year) + str(today.month)
+                    payment_day = 5 #5 par défaut
+                    if data["payment_day"]:
+                        payment_day = int(data["payment_day"])
+                    date_due = calculate_due_date(
+                        today.date(), payment_day)
+                    logger.warning("date due %s", date_due)
+                    if data["payment_day"]:
+                        date_due = date_due.replace(day=int(data["payment_day"]))
+                        logger.warning("date due updated %s", date_due)
+                    date_to = date_due + datetimedelta(
+                        months=periodicity
+                    )
+                    date_valid_to = date_to - timedelta(days=1)
+                    logger.warning("current date_valid_to %s", date_valid_to)
+                    quantity = 1
+                    if data["periodicity"]:
+                        if data["periodicity"] == 'Q':
+                            family_amount = family_amount * 3
+                            quantity = 3
+                            government_amount = government_amount * 3
+                        elif data["periodicity"] == 'S':
+                            family_amount = family_amount * 6
+                            quantity = 6
+                            government_amount = government_amount * 6
+                        elif data["periodicity"] == 'Y':
+                            family_amount = family_amount * 12
+                            quantity = 12
+                            government_amount = government_amount * 12
+                    logger.warning("government amount %s ",
+                                    government_amount)
+                    logger.warning("family amount %s ", family_amount)
+                    logger.warning("head insuree %s ",
+                                    family.head_insuree)
+                    existing_invoices = False
+                    if family.head_insuree:
+                        existing_invoices = Invoice.objects.filter(
+                            subject_id=family.head_insuree.id,
+                            date_valid_from__date__gte=date_due,
+                            is_deleted=False
+                        )
+                    logger.warning("existing invoices %s ",
+                                    existing_invoices)
+                    if not existing_invoices:
+                        same_code_invoices = Invoice.objects.filter(
+                            subject_id=family.head_insuree.id
+                        )
+                        logger.warning("same code invoices %s ",
+                                    same_code_invoices)
+                        if same_code_invoices:
+                            code = code + "_" + str(
+                                len(same_code_invoices)+1)
+                        # create goverment invoice
+                        policy_holder = PolicyHolder.objects.filter(
+                            is_deleted=False,
+                            code="AFD"
+                        ).filter(
+                            Q(date_valid_to__isnull=True) |
+                            Q(date_valid_to__date__gte=today.date())
+                        ).first()
+                        logger.warning("policy holder found %s", policy_holder)
+                        if government_amount > 0 and policy_holder:
+                            values = {
+                                "code": code,
+                                "date_due": date_due,
+                                "date_valid_from": date_due,
+                                "date_valid_to": date_valid_to,
+                                "amount_net": government_amount,
+                                "amount_total": government_amount,
+                                "status": 1,
+                                "cron_job_code": code
+                            }
+                            if family.head_insuree:
+                                values["subject_id"] = family.head_insuree.id
+                                values["subject_type"] = "insuree"
+                                values["thirdparty_id"] = policy_holder.id
+                                values["thirdparty_type"] = "policyholder"
+                                if family_amount > 0:
+                                    # update code as two invoice will be
+                                    # created as the code is unique
+                                    values["code"] = values["code"] + "-G"
+                                    values["cron_job_code"] = values["cron_job_code"] + "-G"
+                            invoice_service = InvoiceService(user=user)
+                            result_invoice = invoice_service.create(
+                                values
+                            )
+                            logger.warning(
+                                "Invoice government amount created %s",
+                                result_invoice)
+                            if result_invoice["success"] is True:
+                                invoice_line_item_service =\
+                                    InvoiceLineItemService(user=user)
+                                item_values = {
+                                    "invoice_id": result_invoice["data"]["id"],
+                                    "code": code,
+                                    "ledger_account": "Etat",
+                                    "quantity": quantity,
+                                    "unit_price": government_amount,
+                                    "amount_net": government_amount,
+                                    "amount_total": government_amount,
+                                    "cron_job_code": code
+                                }
+                                if family_amount > 0:
+                                    # update code as two invoice will be
+                                    # created as the code is unique
+                                    item_values["code"] = item_values["code"] + "-G"
+                                    item_values["cron_job_code"] = item_values["cron_job_code"] + "-G"
+                                result = invoice_line_item_service.create(
+                                    item_values
+                                )
+                                logger.warning(
+                                    "Invoice line gov_amount created %s",
+                                    result)
+                        # create Family invoice
+                        if family_amount > 0:
+                            invoice_service = InvoiceService(user=user)
+                            gov_values = {
+                                "code": code,
+                                "date_due": date_due,
+                                "date_valid_from": date_due,
+                                "date_valid_to": date_valid_to,
+                                "amount_net": family_amount,
+                                "amount_total": family_amount,
+                                "status": 1,
+                                "cron_job_code": code
+                            }
+                            if family.head_insuree:
+                                gov_values["subject_id"] = family.head_insuree.id
+                                gov_values["subject_type"] = "insuree"
+                                gov_values["thirdparty_id"] = family.head_insuree.id
+                                gov_values["thirdparty_type"] = "insuree"
+                            result_invoice = invoice_service.create(
+                                gov_values
+                            )
+                            logger.warning(
+                                "Invoice family amount created %s",
+                                result_invoice)
+                            if result_invoice["success"] is True:
+                                invoice_line_item_service =\
+                                    InvoiceLineItemService(user=user)
+                                result = invoice_line_item_service.create(
+                                    {
+                                        "invoice_id": result_invoice["data"]["id"],
+                                        "code": code,
+                                        "ledger_account": "Cotisant",
+                                        "quantity": quantity,
+                                        "unit_price": family_amount,
+                                        "amount_net": family_amount,
+                                        "amount_total": family_amount,
+                                        "cron_job_code": code
+                                    }
+                                )
+                                logger.warning(
+                                    "Invoice line amount_family created %s",
+                                    result)
 
     def generate_contribution_receipt(self, product, enroll_date):
         from contribution.models import Premium
@@ -180,7 +549,12 @@ class ByFamilyOrInsureeResponseItem(object):
                  balance,
                  validity_from,
                  validity_to,
-                 max_installments
+                 max_installments,
+                 signature_date,
+                 periodicity,
+                 payment_day,
+                 contribution_plan_code=None,
+                 contribution_plan_name=None
                  ):
         self.policy_id = policy_id
         self.policy_uuid = policy_uuid
@@ -204,6 +578,11 @@ class ByFamilyOrInsureeResponseItem(object):
         self.validity_from = validity_from
         self.validity_to = validity_to
         self.max_installments = max_installments
+        self.signature_date = signature_date
+        self.periodicity = periodicity
+        self.payment_day = payment_day
+        self.contribution_plan_code = contribution_plan_code
+        self.contribution_plan_name = contribution_plan_name
 
     def __eq__(self, other):
         return isinstance(other, self.__class__) and self.__dict__ == other.__dict__
@@ -277,6 +656,8 @@ class FilteredPoliciesService(object):
         if row.total_ded_g:
             balance -= row.total_ded_g
 
+        contribution_plan_code = row.contribution_plan.code if row.contribution_plan else None
+        contribution_plan_name = row.contribution_plan.name if row.contribution_plan else None
         return ByFamilyOrInsureeResponseItem(
             policy_id=row.id,
             policy_uuid=row.uuid,
@@ -300,6 +681,11 @@ class FilteredPoliciesService(object):
             validity_from=row.validity_from,
             validity_to=row.validity_to,
             max_installments=row.product.max_installments,
+            signature_date=row.signature_date,
+            periodicity=row.periodicity,
+            payment_day=row.payment_day,
+            contribution_plan_code=contribution_plan_code,
+            contribution_plan_name=contribution_plan_name,
         )
 
     def build_query(self, req):
@@ -1022,6 +1408,7 @@ HOF{% endif %}
 
 
 def update_insuree_policies(policy, audit_user_id):
+    print("Membres ", policy.family.members.filter(validity_to__isnull=True))
     for member in policy.family.members.filter(validity_to__isnull=True):
         existing_ip = InsureePolicy.objects.filter(validity_to__isnull=True, insuree=member, policy=policy).first()
         if existing_ip:
@@ -1047,6 +1434,25 @@ def policy_status_premium_paid(policy, effective_date):
     if PolicyConfig.activation_option == PolicyConfig.ACTIVATION_OPTION_CONTRIBUTION:
         policy.effective_date = effective_date
         policy.status = Policy.STATUS_ACTIVE
+        print(f"there is the expiry date before {policy.expiry_date}")
+        # Calcul de la date d'expiration en fonction de la périodicité
+        if policy.periodicity == Policy.MONTHLY:
+            base_expiry= effective_date + relativedelta(months=1)
+        elif policy.periodicity == Policy.QUARTERLY:
+            base_expiry = effective_date + relativedelta(months=3)
+        elif policy.periodicity == Policy.SEMESTER:
+            base_expiry = effective_date + relativedelta(months=6)
+        elif policy.periodicity == Policy.YEARLY:
+            base_expiry = effective_date + relativedelta(years=1)
+        else:
+            base_expiry = effective_date + relativedelta(months=1)
+        
+        product = policy.product
+        grace_days = (product.grace_period_payment or 0) * 30
+        grace_period = timedelta(days=grace_days) if grace_days else timedelta(0)
+        policy.expiry_date = base_expiry + grace_period
+        print(f"there is the grace period {grace_period}")
+        print(f"there is the expiry date after {policy.expiry_date}")
     else:
         policy.status = Policy.STATUS_READY
 
