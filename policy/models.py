@@ -18,25 +18,7 @@ from django.utils import timezone as django_tz
 from django.db.models.signals import post_save, post_delete
 from django.dispatch import receiver
 
-from core.apps import ENROLMENT_UBA_LINK_TYPE, VILLAGE_MODEL
-from core.uba_filters import build_uba_filter_query
-
-
-def _enrolment_uba_filter(user, prefixes):
-    """
-    Narrow to the villages `user` is an enrolment officer of, through their ENROLMENT
-    UserBusinessAccess links. None when they hold none, the caller then keeping whatever
-    row security it applies otherwise.
-
-    Mirrors `insuree.models._enrolment_uba_filter`: `prefixes` is the field path(s) from
-    the filtered model to the village.
-    """
-    return build_uba_filter_query(
-        user,
-        link_types=ENROLMENT_UBA_LINK_TYPE,
-        model_label=VILLAGE_MODEL,
-        prefix=prefixes,
-    )
+from location.models import LocationManager
 
 
 class Policy(core_models.VersionedModel):
@@ -106,13 +88,13 @@ class Policy(core_models.VersionedModel):
         if settings.ROW_SECURITY and user.is_anonymous:
             return queryset.filter(id=-1)
         if settings.ROW_SECURITY:
-            # a policy is reached through the family it covers, whose location is a
-            # village: the enrolment officer sees the policies of the villages they hold
-            # an ENROLMENT link on. No link leaves the queryset untouched, so a user who
-            # is not an enrolment officer keeps the access they have today.
-            uba_filter = _enrolment_uba_filter(user, ['family__location'])
-            if uba_filter is not None:
-                return queryset.filter(uba_filter)
+            # The "how do we reach the location of a policy ?" the TODO above asked about:
+            # through the family it covers, whose own location is a village. That also
+            # answers the ENROLMENT narrowing, `build_user_location_filter_query` walking
+            # the path down to the village the credential is held on.
+            queryset = LocationManager().build_user_location_filter_query(
+                user._u, prefix='family__location__parent__parent',
+                queryset=queryset, loc_types=['D'])
         return queryset
 
 
