@@ -46,6 +46,12 @@ class PolicyGQLType(DjangoObjectType):
         }
         connection_class = ExtendedConnection
 
+    @classmethod
+    def get_queryset(cls, queryset, info):
+        # the row security lives on the model so that GraphQL and the REST/FHIR API
+        # share it; without this the model rule was simply never reached from GraphQL
+        return Policy.get_queryset(queryset, info)
+
 
 class PolicyAndWarningsGQLType(graphene.ObjectType):
     policy = graphene.Field(PolicyGQLType)
