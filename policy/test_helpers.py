@@ -2,6 +2,7 @@ from contribution.models import Premium
 from insuree.models import InsureePolicy
 from insuree.test_helpers import create_test_insuree
 from policy.models import Policy
+from policy.test_factories import PolicyFactory
 from policy.values import policy_values
 from product.models import Product
 from core.test_helpers import create_test_interactive_user
@@ -47,22 +48,13 @@ def create_test_policy2(
     policy = policy_qs.first()
 
     fallback_start_date = datetime.date(datetime.date.today().year, 1, 1)
-    fallback_end_date = datetime.date(datetime.date.today().year, 12, 31)
 
     if not policy:
-        policy = Policy.objects.create(
+        policy = PolicyFactory(
             **{
                 "family": insuree.family,
                 "product_id": product.id if isinstance(product, Product) else product,
-                "status": Policy.STATUS_ACTIVE,
-                "stage": Policy.STAGE_NEW,
-                "enroll_date": fallback_start_date,
-                "start_date": fallback_start_date,
-                "validity_from": fallback_start_date,
-                "effective_date": fallback_start_date,
-                "expiry_date": fallback_end_date,
                 "validity_to": None if valid else fallback_start_date,
-                "audit_user_id": -1,
                 **custom_props,
             }
         )
@@ -113,12 +105,10 @@ def create_test_policy_with_IPs(
     start_date = dts("2019-01-02")
     expiry_date = dts("2039-06-01")
 
-    policy = Policy.objects.create(
+    policy = PolicyFactory(
         **{
             "family": insuree.family,
             "product_id": product.id if isinstance(product, Product) else product,
-            "status": Policy.STATUS_ACTIVE,
-            "stage": Policy.STAGE_NEW,
             "enroll_date": default_date,
             "start_date": start_date,
             "validity_from": default_date,
@@ -126,7 +116,6 @@ def create_test_policy_with_IPs(
             "expiry_date": expiry_date,
             "value": value,
             "validity_to": None if valid else default_date,
-            "audit_user_id": -1,
             **(policy_props if policy_props else {}),
         }
     )
