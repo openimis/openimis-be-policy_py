@@ -9,7 +9,6 @@ from claim.test_helpers import (
 )
 from claim.services import processing_claim
 from core.test_helpers import create_test_officer, create_test_interactive_user
-from django.conf import settings
 from django.test import TestCase
 from insuree.test_helpers import create_test_photo
 from medical.test_helpers import create_test_item, create_test_service
@@ -155,8 +154,12 @@ class EligibilityServiceTestCase(TestCase):
             total_deliveries_left=None,
             total_consultations_left=None,
         )
-        settings.ROW_SECURITY = False
-        native_response = native_el_svc.request(req, EligibilityResponse(req))
+        # self.settings(), not `settings.ROW_SECURITY = False`: a bare
+        # assignment is never undone, so it stayed False for every test the
+        # process ran afterwards -- including the row security tests in claim,
+        # which the manifest runs after policy and which then passed vacuously.
+        with self.settings(ROW_SECURITY=False):
+            native_response = native_el_svc.request(req, EligibilityResponse(req))
         self.assertIsNotNone(native_response)
         self.assertEqual(native_response, expected_resposnse)
 
@@ -201,9 +204,9 @@ class EligibilityServiceTestCase(TestCase):
             total_deliveries_left=None,
             total_consultations_left=None,
         )
-        settings.ROW_SECURITY = False
-        native_response = EligibilityResponse(req)
-        native_response = native_el_svc.request(req, native_response)
+        with self.settings(ROW_SECURITY=False):
+            native_response = EligibilityResponse(req)
+            native_response = native_el_svc.request(req, native_response)
         self.assertIsNotNone(native_response)
         self.assertEqual(native_response, expected_resposnse)
 
@@ -249,9 +252,9 @@ class EligibilityServiceTestCase(TestCase):
             total_deliveries_left=None,
             total_consultations_left=None,
         )
-        settings.ROW_SECURITY = False
-        native_response = EligibilityResponse(req)
-        native_response = native_el_svc.request(req, native_response)
+        with self.settings(ROW_SECURITY=False):
+            native_response = EligibilityResponse(req)
+            native_response = native_el_svc.request(req, native_response)
         self.assertIsNotNone(native_response)
         self.assertEqual(native_response, expected_resposnse)
         result = PolicyService(self.user).set_deleted(policy)
@@ -292,9 +295,9 @@ class EligibilityServiceTestCase(TestCase):
 
         el_svc = EligibilityService(self.user)
         req = EligibilityRequest(chf_id=insuree.chf_id, item_code=item.code)
-        settings.ROW_SECURITY = False
 
-        response = el_svc.request(req)
+        with self.settings(ROW_SECURITY=False):
+            response = el_svc.request(req)
         self.assertIsNotNone(response)
         self.assertEqual(response.total_admissions_left, 444719)
 

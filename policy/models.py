@@ -129,6 +129,8 @@ class Policy(core_models.VersionedModel):
 
 
 class PolicyRenewal(core_models.VersionedModel):
+    row_scope = core_models.ParentScope("policy")
+
     id = models.AutoField(db_column="RenewalID", primary_key=True)
     uuid = models.CharField(
         db_column="RenewalUUID", max_length=36, default=uuid.uuid4, unique=True

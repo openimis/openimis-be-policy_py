@@ -11,6 +11,7 @@ from core import (
 from core.schema import OfficerGQLType
 from product.schema import ProductGQLType
 from django.core.exceptions import PermissionDenied
+from core.gql import ScopedQuerysetMixin
 
 
 class PolicyGQLType(DjangoObjectType):
@@ -59,7 +60,7 @@ class PolicyGQLType(DjangoObjectType):
         return queryset.distinct()
 
 
-class PolicyRenewalGQLType(DjangoObjectType):
+class PolicyRenewalGQLType(ScopedQuerysetMixin, DjangoObjectType):
     class Meta:
         model = PolicyRenewal
         interfaces = (graphene.relay.Node,)
