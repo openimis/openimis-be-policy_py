@@ -3,11 +3,15 @@ from django.db.models import Q,Count
 import datetime as py_datetime
 from decimal import *
 from .models import Policy
-
+from .apps import CALCULATION_RULES
+from contract.models import ContractContributionPlanDetails as ContractContributionPlanDetailsModel
 from core.apps import CoreConfig
 from dateutil.relativedelta import relativedelta
 from core.apps import CoreConfig
-
+from contribution_plan.models import ContributionPlan
+from django.utils.translation import gettext as _
+from django.core.exceptions import ValidationError
+from uuid import UUID
 
 def cycle_start(product, cycle, ref_date):
     c = getattr(product, "start_cycle_%s" % (cycle + 1), None)
@@ -57,11 +61,25 @@ def set_start_date(policy):
 
 def set_expiry_date(policy):
     product = policy.product
+    print("policy: ", policy.periodicity)
     from core import datetime, datetimedelta
+    value = 1
+    if policy.periodicity:
+        if policy.periodicity == 'Q':
+            value = 3
+        if policy.periodicity == 'S':
+            value = 6
+        if policy.periodicity == 'Y':
+            value = 12
+        if policy.periodicity == 'M':
+            value = 1
 
+    # insurance_period = datetimedelta(
+    #     months=product.insurance_period) if product.insurance_period % 12 != 0 else datetimedelta(
+    #     years=product.insurance_period // 12)
     insurance_period = datetimedelta(
-        months=product.insurance_period) if product.insurance_period % 12 != 0 else datetimedelta(
-        years=product.insurance_period // 12)
+        months=value) if value % 12 != 0 else datetimedelta(
+        years=value // 12)
     policy.expiry_date = (
             datetime.date.from_ad_date(policy.start_date) +
             insurance_period -
@@ -93,6 +111,8 @@ def family_counts(product, family):
     
     over_children = 0
     over_adults = 0
+    over_other_children = 0
+    over_other_adults = 0
 
     if product.max_members:
         over_adults = max(0,adults   - product.max_members)
@@ -188,7 +208,7 @@ def discount(policy, prev_policy):
         discount_renew(policy, prev_policy)
 
 
-def set_value(policy, family, prev_policy):
+def set_value(policy, family, prev_policy, user):
     product = policy.product
     f_counts = family_counts(policy.product, family)
     contributions = sum_contributions(product, f_counts)
@@ -196,9 +216,45 @@ def set_value(policy, family, prev_policy):
     registration = sum_registrations(policy, product, f_counts)
     policy.value = Decimal(contributions + general_assembly + registration)
     discount(policy, prev_policy)
+    instance = False
+    if policy.contribution_plan:
+        if isinstance(policy.contribution_plan, (str, UUID)):
+            contribution_plan_uuid = policy.contribution_plan
+        else:
+            contribution_plan_uuid = policy.contribution_plan.uuid
+        instance = ContributionPlan.objects.filter(
+            uuid=str(
+                contribution_plan_uuid
+            )
+        )
+    if not instance:
+        raise ValidationError(_("policy.mutation.contribution_plan_not_found"))
+    instance = instance[0]
+    for calculation_rule in CALCULATION_RULES:
+        result_signal = calculation_rule.signal_calculate_event.send(
+            sender=instance.__class__.__name__, instance=instance, user=user, context="create", family=family
+        )
+        print("result_signal ", result_signal)
+        if result_signal[0][1]:
+            policy.value = Decimal(result_signal[0][1])
+            period = 1
+            print("policy.periodicity ", policy.periodicity)
+            if policy.periodicity:
+                if policy.periodicity == 'Q':
+                    period = 3
+                if policy.periodicity == 'S':
+                    period = 6
+                if policy.periodicity == 'Y':
+                    period = 12
+                if policy.periodicity == 'M':
+                    period = 1
+            policy.value = policy.value * period
+        else:
+            ValidationError(_("policy.mutation.policy_value_error"))
+            policy.value = Decimal(0)
 
 
-def policy_values(policy, family, prev_policy):
+def policy_values(policy, family, prev_policy, user):
     members = family.members.filter(validity_to__isnull=True).count()
     max_members = policy.product.max_members
     above_max = max(0, members - max_members)
@@ -207,5 +263,5 @@ def policy_values(policy, family, prev_policy):
         warnings.append(_("policy.validation.members_count_above_max") % {'max': max_members, 'count': members})
     set_start_date(policy)
     set_expiry_date(policy)
-    set_value(policy, family, prev_policy)
+    set_value(policy, family, prev_policy, user)
     return policy, warnings

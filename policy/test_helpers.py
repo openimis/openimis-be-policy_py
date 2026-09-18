@@ -4,20 +4,24 @@ from insuree.test_helpers import create_test_insuree
 from policy.models import Policy
 from policy.values import policy_values
 from product.models import Product
+from contribution_plan.models import ContributionPlan
 from core.utils import filter_validity
+from core.test_helpers import create_test_interactive_user
+from core.models import User
+from django.core.exceptions import ObjectDoesNotExist
 import datetime
 
 
-def create_test_policy(product, insuree, link=True, valid=True, custom_props=None, check=False):
+def create_test_policy(product, insuree, link=True, valid=True, custom_props=None, check=False, contribution_plan=None):
     """
     Compatibility method that only return the Policy
     """
-    return create_test_policy2(product, insuree, link, valid, custom_props, check)[0]
+    return create_test_policy2(product, insuree, link, valid, custom_props, check, contribution_plan)[0]
 
 def dts(s):
     return datetime.datetime.strptime(s, "%Y-%m-%d").date()
 
-def create_test_policy2(product, insuree, link=True, valid=True, custom_props=None, check=False):
+def create_test_policy2(product, insuree, link=True, valid=True, custom_props=None, check=False, contribution_plan=None):
     """
     Creates a Policy and optionally an InsureePolicy
     :param product: Product on which this Policy is based (or its ID)
@@ -32,6 +36,7 @@ def create_test_policy2(product, insuree, link=True, valid=True, custom_props=No
         **{
             "family": insuree.family,
             "product_id": product.id if isinstance(product, Product) else product,
+            "contribution_plan_id": contribution_plan.id if isinstance(contribution_plan, ContributionPlan) else contribution_plan,
             "status": Policy.STATUS_ACTIVE,
             "stage": Policy.STAGE_NEW,
             "enroll_date": dts("2019-01-01"),
@@ -58,7 +63,11 @@ def create_test_policy2(product, insuree, link=True, valid=True, custom_props=No
         insuree_policy = None
 
     # Was added for OMT-333 but breaks tests that explicitly call policy_values
-    policy, warnings = policy_values(policy, insuree.family, None)
+    try:
+        user = User.objects.get(username='Le-positif')
+    except ObjectDoesNotExist:
+        user = create_test_interactive_user(username='Le-positif', password="positif123")
+    policy, warnings = policy_values(policy, insuree.family, None, user)
     if check and warnings:
         raise Exception("Policy has warnings: {}".format(warnings))
     return policy, insuree_policy

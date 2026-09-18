@@ -11,6 +11,7 @@ from django.core.exceptions import PermissionDenied
 
 class PolicyGQLType(DjangoObjectType):
     sum_premiums = graphene.Float(source="sum_premiums")
+    payment_day = graphene.Int()
     
     def resolve_family(self, info):
         if not info.context.user.has_perms(PolicyConfig.gql_query_policies_perms):
@@ -39,11 +40,23 @@ class PolicyGQLType(DjangoObjectType):
             "stage": ["exact"],
             "status":  ["exact", "lt", "lte", "gt", "gte"],
             "value": ["exact", "lt", "lte", "gt", "gte"],
+            "signature_date": ["exact", "lt", "lte", "gt", "gte"],
+            "periodicity": ["exact"],
+            "payment_day": ["exact"],
+            "insuree_policies__insuree__chf_id": ["exact", "icontains"],
+            "insuree_policies__insuree__last_name": ["icontains"],
+            "insuree_policies__insuree__other_names": ["icontains"],
             **prefix_filterset("product__", ProductGQLType._meta.filter_fields),
             **prefix_filterset("officer__", OfficerGQLType._meta.filter_fields),
         }
         connection_class = ExtendedConnection
-
+    
+    @classmethod
+    def get_queryset(cls, queryset, info):
+        # Prevent duplicate Policy records when filtering by chfId through
+        # insuree_policies__insuree__chf_id. This type of filter creates a JOIN
+        # that can return multiple rows per Policy if multiple InsureePolicies exist.
+        return queryset.distinct()
 
 class PolicyAndWarningsGQLType(graphene.ObjectType):
     policy = graphene.Field(PolicyGQLType)
@@ -76,6 +89,11 @@ class PolicyByFamilyOrInsureeGQLType(graphene.ObjectType):
     validity_from = graphene.Date()
     validity_to = graphene.Date()
     max_installments = graphene.Int()
+    contribution_plan_code = graphene.String()
+    contribution_plan_name = graphene.String()
+    signature_date = graphene.Date()
+    periodicity = graphene.String()
+    payment_day = graphene.Int()
 
 
 class PolicyByFamilyOrInsureeConnection(ExtendedRelayConnection):

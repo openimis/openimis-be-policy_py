@@ -10,7 +10,8 @@ from django.db import models
 from graphql import ResolveInfo
 from insuree.models import Family
 from product.models import Product
-
+from contribution_plan.models import ContributionPlan
+from django.utils import timezone as django_tz
 
 class Policy(core_models.VersionedModel):
     id = models.AutoField(db_column='PolicyID', primary_key=True)
@@ -22,6 +23,7 @@ class Policy(core_models.VersionedModel):
 
     family = models.ForeignKey(Family, models.DO_NOTHING, db_column='FamilyID', related_name="policies")
     enroll_date = fields.DateField(db_column='EnrollDate')
+    signature_date = fields.DateField(db_column='SignatureDate', blank=True, null=True)
     start_date = fields.DateField(db_column='StartDate')
     effective_date = fields.DateField(db_column='EffectiveDate', blank=True, null=True)
     expiry_date = fields.DateField(db_column='ExpiryDate', blank=True, null=True)
@@ -32,7 +34,35 @@ class Policy(core_models.VersionedModel):
 
     offline = models.BooleanField(db_column='isOffline', blank=True, null=True)
     audit_user_id = models.IntegerField(db_column='AuditUserID')
+    contribution_plan = models.ForeignKey(ContributionPlan, models.DO_NOTHING,
+                                db_column='ContributionPlanID', related_name="contribution_plans",
+                                blank=True, null=True,)
+    creation_date = models.DateField(db_column='creationDate', default=django_tz.now, blank=True, null=True)
     # row_id = models.BinaryField(db_column='RowID', blank=True, null=True)
+    MONTHLY = 'M'
+    QUARTERLY = 'Q'
+    SEMESTER = 'S'
+    YEARLY = 'Y'
+    PERIODICITY_CHOICES = [
+        (MONTHLY, "Monthly"),
+        (QUARTERLY, "Quarterly"),
+        (SEMESTER, "Semester"),
+        (YEARLY, "Yearly"),
+    ]
+    periodicity = models.CharField(db_column='Periodicity', max_length=1, blank=True, null=True,
+                                   choices=PERIODICITY_CHOICES, default=MONTHLY)
+    PAYMENT_DAY_5 = 5
+    PAYMENT_DAY_10 = 10
+    PAYMENT_DAY_15 = 15
+    PAYMENT_DAY_20 = 20
+    PAYMENT_DAY_CHOICES = [
+        (PAYMENT_DAY_5, "5"),
+        (PAYMENT_DAY_10, "10"),
+        (PAYMENT_DAY_15, "15"),
+        (PAYMENT_DAY_20, "20"),
+    ]
+    payment_day = models.SmallIntegerField(db_column='PaymentDay', blank=True, null=True,
+                                                choices=PAYMENT_DAY_CHOICES, default=PAYMENT_DAY_5)
 
     @staticmethod
     def get_query_sum_premium(photo=False):
