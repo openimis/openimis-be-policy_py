@@ -112,7 +112,10 @@ class Query(graphene.ObjectType):
     policy_renewals = DjangoFilterConnectionField(PolicyRenewalGQLType)
 
     def resolve_policy_renewals(self, info, **kwargs):
-        if not info.context.user.has_perms(PolicyConfig.gql_mutation_renew_policies_perms):
+        # A read gated by a read-named right; same id as the renew mutation for now,
+        # see PolicyConfig. Non-admins are additionally narrowed to their own officer
+        # just below.
+        if not info.context.user.has_perms(PolicyConfig.gql_query_policy_renewals_perms):
             raise PermissionDenied(_("unauthorized"))
         user = info.context.user
         filters = Q(validity_to__isnull=True)
