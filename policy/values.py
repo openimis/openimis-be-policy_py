@@ -6,7 +6,7 @@ from calculation.services import run_calculation_rules
 from core.apps import CoreConfig
 from dateutil.relativedelta import relativedelta
 from contribution_plan.models import ContributionPlan
-from policy.utils import get_members
+from policy.utils import get_contribution_plan_uuid, get_members
 
 
 def cycle_start(product, cycle, ref_date):
@@ -232,14 +232,14 @@ def set_value(policy, members, prev_policy, user):
     policy.value = Decimal(contributions + general_assembly + registration)
     discount(policy, prev_policy)
     # try to get policy value from calcrule
+    contribution_plan_uuid = get_contribution_plan_uuid(policy)
     instance = (
-        ContributionPlan.objects.filter(uuid=policy.contribution_plan).first()
-        if policy.contribution_plan
+        ContributionPlan.objects.filter(uuid=str(contribution_plan_uuid)).first()
+        if contribution_plan_uuid
         else None
     )
     policy_value = (
         run_calculation_rules(
-            sender=instance.__class__.__name__,
             instance=instance,
             user=user,
             context="policy_value",

@@ -4,6 +4,7 @@ from core.schema import (
     signal_mutation_module_validate,
 )
 import graphene
+
 from django.core.exceptions import PermissionDenied
 from django.db.models import Prefetch
 from django.db.models import Q
@@ -136,7 +137,14 @@ class Query(graphene.ObjectType):
                 raise ValueError(
                     f"Contribution plan {cp_uuid} is not attached to a product"
                 )
-            product_id = contribution_plan.benefit_plan
+            benefit_plan = contribution_plan.benefit_plan
+            if not benefit_plan:
+                raise ValueError(
+                    f"Contribution plan {cp_uuid} is not attached to a product"
+                )
+            # `benefit_plan` is a Product instance, the product queryset below expects the
+            # primary key of the attached product.
+            product_id = benefit_plan.pk
         elif "product_id" in kwargs:
             product_id = kwargs.get("product_id")
         else:

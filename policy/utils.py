@@ -9,7 +9,6 @@ class MonthsAdd(Func):
     it might need an update with custom resolve.
     Usage: Foo.objects.annotate(end_date=MonthsAdd('start_date', 'duration')).filter(end_date__gt=datetime.now)
     """
-
     # https://stackoverflow.com/questions/33981468/using-dateadd-in-django-filter
 
     arg_joiner = " + CAST("
@@ -44,21 +43,33 @@ def get_queryset_valid_at_date(queryset, date):
     return queryset.filter(validity_from__date__lte=date, validity_to__isnull=True)
 
 
+def get_contribution_plan_uuid(policy):
+    """
+    Returns the uuid of the contribution plan attached to the policy.
+
+    `policy.contribution_plan` holds the raw uuid when the policy is not saved yet (like the
+    in-memory policy built by the `policyValues` query) but a ContributionPlan instance once the
+    policy comes from the database, so the foreign key value is used whenever it is available.
+    """
+    contribution_plan = getattr(policy, "contribution_plan_id", None) or getattr(
+        policy, "contribution_plan", None
+    )
+    # the relation can also be given as an (unsaved) ContributionPlan instance
+    return getattr(contribution_plan, "id", contribution_plan)
+
 def get_members(policy, family, user, members=None):
     if members:
         return members
     # get the current policy members
 
     # look in calculation rules
-    if policy.contribution_plan:
-        instance = (
-            ContributionPlan.objects.filter(uuid=str(policy.contribution_plan)).first()
-            if policy.contribution_plan
-            else None
-        )
+    contribution_plan_uuid = get_contribution_plan_uuid(policy)
+    if contribution_plan_uuid:
+        instance = ContributionPlan.objects.filter(
+            uuid=str(contribution_plan_uuid)
+        ).first()
         if instance:
             members = run_calculation_rules(
-                sender=instance.__class__.__name__,
                 instance=instance,
                 user=user,
                 context="members",
