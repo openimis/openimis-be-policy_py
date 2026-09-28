@@ -1,6 +1,7 @@
 from unittest import mock, skip
 import datetime
 from django.core.exceptions import PermissionDenied
+from insuree.apps import InsureeConfig
 from policy.apps import PolicyConfig
 from claim.test_helpers import (
     create_test_claim,
@@ -52,8 +53,14 @@ class EligibilityServiceTestCase(TestCase):
             service = EligibilityService(mock_user)
             with self.assertRaises(PermissionDenied):
                 service.request(req)
-            mock_user.has_perms.assert_called_with(
+            # Both rights are asked for, and denied: the eligibility right and the
+            # insuree enquiry right, which reaches eligibility for the same business
+            # act. `assert_called_with` only sees the last call, so check each.
+            mock_user.has_perms.assert_any_call(
                 PolicyConfig.gql_query_eligibilities_perms
+            )
+            mock_user.has_perms.assert_any_call(
+                InsureeConfig.gql_query_insuree_inquire_perms
             )
 
     @skip(

@@ -18,6 +18,7 @@ from django.utils.translation import gettext as _
 from graphene.utils.str_converters import to_snake_case
 
 from core.signals import register_service_signal
+from insuree.apps import InsureeConfig
 from insuree.models import Insuree, InsureePolicy
 from insuree.services import create_insuree_renewal_detail
 from medical.models import Service, Item
@@ -735,8 +736,13 @@ class EligibilityService(object):
         self.service = NativeEligibilityService(user)
 
     def request(self, request):
-        if not self.user or not self.user.has_perms(
-            PolicyConfig.gql_query_eligibilities_perms
+        # The real gate: REST and FHIR reach eligibility without passing through the
+        # GraphQL resolver, so the pair of rights lives here too. The enquiry right
+        # (101105) answers for the same business act - looking an insuree up to serve
+        # them - and a claim is never entered without that lookup first.
+        if not self.user or not (
+            self.user.has_perms(PolicyConfig.gql_query_eligibilities_perms)
+            or self.user.has_perms(InsureeConfig.gql_query_insuree_inquire_perms)
         ):
             raise PermissionDenied()
 
