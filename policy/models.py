@@ -4,6 +4,7 @@ from core import fields
 from core import models as core_models
 from core.utils import filter_validity
 from core.models import Officer
+from core.apps import ENROLMENT_UBA_LINK_TYPE
 from django.core.cache import caches
 cache = caches['coverage']
 from django_redis.cache import RedisCache
@@ -89,12 +90,13 @@ class Policy(core_models.VersionedModel):
             return queryset.filter(id=-1)
         if settings.ROW_SECURITY:
             # The "how do we reach the location of a policy ?" the TODO above asked about:
-            # through the family it covers, whose own location is a village. That also
-            # answers the ENROLMENT narrowing, `build_user_location_filter_query` walking
-            # the path down to the village the credential is held on.
+            # through the family it covers, whose own location is a village. That is also
+            # the path the ENROLMENT narrowing takes, `build_user_location_filter_query`
+            # walking it down to the village the credential is held on.
             queryset = LocationManager().build_user_location_filter_query(
                 user._u, prefix='family__location__parent__parent',
-                queryset=queryset, loc_types=['D'])
+                queryset=queryset, loc_types=['D'],
+                link_types=ENROLMENT_UBA_LINK_TYPE)
         return queryset
 
 

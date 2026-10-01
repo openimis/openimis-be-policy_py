@@ -7,20 +7,21 @@ from core import prefix_filterset, filter_validity, ExtendedConnection, Extended
 from core.schema import OfficerGQLType
 from product.schema import ProductGQLType
 from django.core.exceptions import PermissionDenied
+from insuree.uba import can_query
 
 
 class PolicyGQLType(DjangoObjectType):
     sum_premiums = graphene.Float(source="sum_premiums")
     
     def resolve_family(self, info):
-        if not info.context.user.has_perms(PolicyConfig.gql_query_policies_perms):
+        if not can_query(info.context.user, PolicyConfig.gql_query_policies_perms):
             raise PermissionDenied(_("unauthorized"))
         if "family_loader" in info.context.dataloaders and self.family_id:
             return info.context.dataloaders["family_loader"].load(self.family_id)
         return self.family
 
     def resolve_product(self, info):
-        if not info.context.user.has_perms(PolicyConfig.gql_query_policies_perms):
+        if not can_query(info.context.user, PolicyConfig.gql_query_policies_perms):
             raise PermissionDenied(_("unauthorized"))
         if "product_loader" in info.context.dataloaders and self.product_id:
             return info.context.dataloaders["product_loader"].load(self.product_id)
