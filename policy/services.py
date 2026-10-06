@@ -557,6 +557,9 @@ class ByFamilyService(FilteredPoliciesService):
 
     def request(self, by_family_request):
         res = self.build_query(by_family_request)
+        # Unlike the enquiry by CHFID, listing a family's policies is not a
+        # nationwide lookup: it is limited to the families the user may see.
+        res = Policy.get_scoped_queryset(res, self.user)
         res = res.filter(family__uuid=by_family_request.family_uuid)
         # .distinct('product__code') >> DISTINCT ON fields not supported by MS-SQL
         if by_family_request.active_or_last_expired_only:

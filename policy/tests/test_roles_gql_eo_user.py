@@ -103,12 +103,12 @@ class GqlEoUserPolicyRoleTests(RightsRoleGraphQLTestCase):
         self.assert_user_has_named_perms(user, ["gql_query_policies_perms"])
         self.assert_user_has_named_perms(user, ["gql_mutation_create_policies_perms"])
 
-    def test_gql_eo_user_policies_query_has_no_row_security(self):
-        """Policy.objects is not location-filtered; EO sees both families' policies."""
+    def test_gql_eo_user_sees_only_own_village_policies(self):
+        """A policy is as visible as its family; an EO's families are its villages' (N02)."""
         user = self._eo_user("peo2")
         uuids = self._policy_uuids(user)
         self.assertIn(str(self.eo_policy.uuid), uuids)
-        self.assertIn(str(self.other_policy.uuid), uuids)
+        self.assertNotIn(str(self.other_policy.uuid), uuids)
 
     def test_gql_eo_user_can_create_policy_for_own_village_family(self):
         user = self._eo_user("peo3")
@@ -130,8 +130,9 @@ class GqlEoUserPolicyRoleTests(RightsRoleGraphQLTestCase):
         """
         self.assert_mutation_ok(user, mutation, mid)
 
-    def test_gql_eo_plus_ca_hf_still_lists_all_policies(self):
+    def test_gql_eo_plus_ca_hf_scopes_to_the_facility_district(self):
+        """The claim administrator's facility overrides the officer villages (N02)."""
         user = self._ca_eo_user("peoa1")
         uuids = self._policy_uuids(user)
-        self.assertIn(str(self.eo_policy.uuid), uuids)
-        self.assertIn(str(self.other_policy.uuid), uuids)
+        self.assertNotIn(str(self.eo_policy.uuid), uuids)
+        self.assertNotIn(str(self.other_policy.uuid), uuids)
