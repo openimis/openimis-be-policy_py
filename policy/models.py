@@ -13,7 +13,7 @@ from django.conf import settings
 from django.db import models
 from django.apps import apps
 from graphql import ResolveInfo
-from insuree.models import Family
+from insuree.models import Family, InsureePolicy
 from product.models import Product
 from django.utils import timezone as django_tz 
 from django.db.models.signals import post_save, post_delete
@@ -160,27 +160,36 @@ if "claim" in sys.modules:
 
     @receiver(post_save, sender=Claim)
     @receiver(post_delete, sender=Claim)
-    def clean_enquire_cache_claim(sender, instance, *args, **kwagrs):
+    def clean_enquire_cache_claim(sender, instance, *args, **kwargs):
         cache.delete(
             f"eligibility_{instance.insuree.family_id or instance.insuree.id}"
         )
 
 @receiver(post_save, sender=Product)
 @receiver(post_delete, sender=Product)
-def clean_all_enquire_cache_product(sender, instance, *args, **kwagrs):
+def clean_all_enquire_cache_product(sender, instance, *args, **kwargs):
     if isinstance(cache, RedisCache):
-        cache.delete("eligibility_*")
+        # django-redis does not expand wildcards in delete()
+        cache.delete_pattern("eligibility_*")
     else:
         cache.clear()
 
 
 @receiver(post_save, sender=Policy)
 @receiver(post_delete, sender=Policy)
-def clean_all_enquire_cache_policy(sender, instance, *args, **kwagrs):
+def clean_all_enquire_cache_policy(sender, instance, *args, **kwargs):
     cache.delete(f"eligibility_{instance.family_id}")
+
+
+@receiver(post_save, sender=InsureePolicy)
+@receiver(post_delete, sender=InsureePolicy)
+def clean_enquire_cache_insuree_policy(sender, instance, *args, **kwargs):
+    cache.delete(
+        f"eligibility_{instance.insuree.family_id or instance.insuree_id}"
+    )
 
 
 @receiver(post_save, sender=Family)
 @receiver(post_delete, sender=Family)
-def clean_all_enquire_cache_family(sender, instance, *args, **kwagrs):
+def clean_all_enquire_cache_family(sender, instance, *args, **kwargs):
     cache.delete(f"eligibility_{instance.id}")

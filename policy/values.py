@@ -1,3 +1,4 @@
+import logging
 from django.utils.translation import gettext as _
 from django.db.models import Q,Count
 import datetime as py_datetime
@@ -7,6 +8,8 @@ from .models import Policy
 from core.apps import CoreConfig
 from dateutil.relativedelta import relativedelta
 from core.apps import CoreConfig
+
+logger = logging.getLogger(__name__)
 
 
 def cycle_start(product, cycle, ref_date):
@@ -56,20 +59,18 @@ def set_start_date(policy):
 
 
 def set_expiry_date(policy, family, enroll_date):
-    print("enroll_date ", enroll_date)
+    logger.debug("enroll_date %s", enroll_date)
     member = family.members.filter(validity_to__isnull=True).first()
-    print("Memebers ", member.dob)
+    logger.debug("Memebers %s", member.dob)
     date_format = "%Y-%m-%d"
     today = py_datetime.datetime.strptime(str(py_datetime.datetime.now().date()), date_format)
     insuree_dob = py_datetime.datetime.strptime(str(member.dob), date_format)
     delta = today - insuree_dob
     age_patient = int(round(delta.days / 365.0))
-    print("age_patient ", age_patient)
-    
+    logger.debug("age_patient %s", age_patient)
     product = policy.product
-    print("Age Max sur le produit ", product.age_maximal)
-    print("Age Min sur le produit ", product.age_minimal)
-    
+    logger.debug("Age Max sur le produit %s", product.age_maximal)
+    logger.debug("Age Min sur le produit %s", product.age_minimal)
     from core import datetime, datetimedelta
 
     insurance_period = datetimedelta(
@@ -87,7 +88,7 @@ def set_expiry_date(policy, family, enroll_date):
             expiry_date = insuree_dob + relativedelta(years=product.age_maximal)
 
     else:
-        print("The product does not have the max age")
+        logger.debug("The product does not have the max age")
     policy.expiry_date = expiry_date
 
 
@@ -221,7 +222,8 @@ def set_value(policy, family, prev_policy):
 
 
 def policy_values(policy, family, prev_policy, user, enroll_date, members=None):
-    members = family.members.filter(validity_to__isnull=True).count()
+    if not members:
+        members = family.members.filter(validity_to__isnull=True).count()
     max_members = policy.product.max_members
     above_max = max(0, members - max_members)
     warnings = []

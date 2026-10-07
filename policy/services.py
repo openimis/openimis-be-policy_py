@@ -43,7 +43,7 @@ class PolicyService:
 
     @register_service_signal('policy_service.create_or_update')
     def update_or_create(self, data, user):
-        print("Data is ", data)
+        logger.debug("Data is %s", data)
         policy_uuid = data.get('uuid', None)
         familyid = data.get('family_id', None)
         insurees = Insuree.objects.filter(family=familyid)
@@ -51,16 +51,16 @@ class PolicyService:
         # expiry_date = data.get('expiry_date', None)
         if insurees and product_id:
             member = insurees[0]
-            print("Dob ", member.dob)
+            logger.debug("Dob %s", member.dob)
             date_format = "%Y-%m-%d"
             today = py_datetime.strptime(str(py_datetime.now().date()), date_format)
             insuree_dob = py_datetime.strptime(str(member.dob), date_format)
             delta = today - insuree_dob
             age_patient = int(round(delta.days / 365.0))
-            print("age_patient ", age_patient)
+            logger.debug("age_patient %s", age_patient)
             product = Product.objects.get(id=product_id)
-            print("Age Max sur le produit ", product.age_maximal)
-            print("Age Min sur le produit ", product.age_minimal)
+            logger.debug("Age Max sur le produit %s", product.age_maximal)
+            logger.debug("Age Min sur le produit %s", product.age_minimal)
             # the_date = py_datetime.strptime(
             #     str(expiry_date), "%Y-%m-%d").date()
             if product.age_minimal:
@@ -72,7 +72,7 @@ class PolicyService:
                     )
             if product.age_maximal:
                 diff = product.age_maximal - age_patient
-                print("diff ", diff)
+                logger.debug("diff %s", diff)
                 if(diff < 0):
                     # The insuree's age is greater than the max age
                     raise Exception(
@@ -81,9 +81,9 @@ class PolicyService:
                     )
                 # from dateutil.relativedelta import relativedelta
                 # exp_date = the_date + relativedelta(years=+diff)
-                # print("exp_date ", exp_date)
+                # logger.debug("exp_date %s", exp_date)
                 # data["expiry_date"] = exp_date
-                print(data["expiry_date"])
+                logger.debug("expiry_date %s", data.get("expiry_date"))
         if isinstance(data['enroll_date'], str):
             data['enroll_date'] = py_datetime.strptime(data['enroll_date'], "%Y-%m-%d").date()
         if 'enroll_date' in data and data['enroll_date'] > py_date.today():
@@ -94,14 +94,14 @@ class PolicyService:
             policy_number = data.get('policy_number', None)
             if policy_number:
                 errors = validate_policy_number(policy_number, True)
-                print("errors ", errors)
+                logger.debug("errors %s", errors)
                 if len(errors):
                     raise Exception((errors[0]["message"]))
                 cheques = ChequeImportLine.objects.filter(
                     chequeImportLineCode=policy_number,
                     chequeImportLineStatus='New'
                 )
-                print("cheques ", cheques)
+                logger.debug("cheques %s", cheques)
                 if cheques:
                     current_cheque = cheques[0]
                     setattr(current_cheque, "chequeImportLineStatus", "Used")
@@ -155,13 +155,13 @@ class PolicyService:
                                 # Si l'assuré a une police FAGEP et on veut attribuer un programme
                                 # CCS, la police FAGEP doit se desactriver
                                 if prod.program.code == "PAL" and program.code == "CCS":
-                                    print("Mise police en attente...")
+                                    logger.debug("Mise police en attente...")
                                     setattr(police, "status", 1)
                                     police.save()
         policy = Policy.objects.create(**data)
         # If a policy has a value of 0 it means that this policy is free
         # we activate the policy immediatelly
-        print("value is ", data['value'])
+        logger.debug("value is %s", data['value'])
         if int(data['value']) == 0:
             setattr(policy, "status",2)
             setattr(policy, "effective_date", data['start_date'])
@@ -795,7 +795,7 @@ class NativeEligibilityService(object):
             f"eligibility_{insuree.family_id or insuree.id}"
         )
 
-        print("cached_data ", cached_data) 
+        logger.debug("cached_data %s", cached_data)
         if cached_data and str(insuree.id) in cached_data:
             result = cached_data[str(insuree.id)]
         else:
@@ -902,12 +902,13 @@ class NativeEligibilityService(object):
                 .order_by("-expiry_date")
                 .first()
             )
+            # the entry is per family: keep the other members already cached
             if not cached_data:
                 cached_data = {}
-                cached_data[str(insuree.id)] = result
+            cached_data[str(insuree.id)] = result
             cache.set(
                 f"eligibility_{insuree.family_id or insuree.id}",
-                result,
+                cached_data,
                 None,
             )
 
@@ -1241,7 +1242,7 @@ HOF{% endif %}
 
 
 def update_insuree_policies(policy, audit_user_id):
-    print("Member Update Insuree policies")
+    logger.debug("Member Update Insuree policies")
     for member in policy.family.members.filter(validity_to__isnull=True):
         existing_ip = InsureePolicy.objects.filter(validity_to__isnull=True, insuree=member, policy=policy).first()
         if existing_ip:
@@ -1287,10 +1288,10 @@ def policy_status_payment_matched(policy):
 
 def validate_policy_number(policy_number, is_new_policy=False):
     if is_new_policy:
-        print("policy_number ", policy_number)
-        print("is_new_policy ", is_new_policy)
+        logger.debug("policy_number %s", policy_number)
+        logger.debug("is_new_policy %s", is_new_policy)
         cheques = ChequeImportLine.objects.filter(chequeImportLineCode=policy_number)
-        print("cheque ", cheques)
+        logger.debug("cheque %s", cheques)
         if cheques:
             if cheques[0].chequeImportLineStatus=="Used":
                 return [{"message": "Chèque %s déjà utilisé" % policy_number}]
