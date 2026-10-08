@@ -19,7 +19,7 @@ from medical.models import Service, Item
 from policy.apps import PolicyConfig
 from policy.utils import MonthsAdd
 from product.models import Product
-from .models import Policy, PolicyRenewal
+from .models import Policy, PolicyRenewal, eligibility_cache_key
 from cs.models import ChequeImportLine
 
 logger = logging.getLogger(__name__)
@@ -791,9 +791,8 @@ class NativeEligibilityService(object):
         eligibility.item_left = items_left
 
         # InsPol -> Policy -> Product -> dedrem
-        cached_data = cache.get(
-            f"eligibility_{insuree.family_id or insuree.id}"
-        )
+        cache_key = eligibility_cache_key(insuree.family_id or insuree.id)
+        cached_data = cache.get(cache_key)
 
         logger.debug("cached_data %s", cached_data)
         if cached_data and str(insuree.id) in cached_data:
@@ -906,11 +905,7 @@ class NativeEligibilityService(object):
             if not cached_data:
                 cached_data = {}
             cached_data[str(insuree.id)] = result
-            cache.set(
-                f"eligibility_{insuree.family_id or insuree.id}",
-                cached_data,
-                None,
-            )
+            cache.set(cache_key, cached_data, None)
 
         if result is None:
             eligibility.total_admissions_left = 0

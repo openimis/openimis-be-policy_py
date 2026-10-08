@@ -7,7 +7,6 @@ from core.models import Officer
 from core.apps import ENROLMENT_UBA_LINK_TYPE
 from django.core.cache import caches
 cache = caches['coverage']
-from django_redis.cache import RedisCache
 
 from django.conf import settings
 from django.db import models
@@ -155,41 +154,57 @@ class PolicyRenewalMutation(core_models.UUIDModel, core_models.ObjectMutation):
         managed = True
         db_table = "policy_renewal_PolicyMutation"
 
+ELIGIBILITY_GENERATION_KEY = "eligibility_generation"
+
+
+def eligibility_cache_key(owner_id):
+    """
+    The eligibility cache entry of a family (or of an insuree without one). The key
+    carries a generation so that every entry can be dropped at once by bumping it,
+    without clearing the cache: the cache aliases share their store.
+    """
+    generation = cache.get(ELIGIBILITY_GENERATION_KEY, 0)
+    return f"eligibility_{generation}_{owner_id}"
+
+
+def invalidate_all_eligibility_cache():
+    try:
+        cache.incr(ELIGIBILITY_GENERATION_KEY)
+    except ValueError:
+        # incr fails on a missing key
+        cache.set(ELIGIBILITY_GENERATION_KEY, 1, None)
+    if hasattr(cache, "delete_pattern"):
+        # django-redis: also free the entries of the previous generations
+        cache.delete_pattern("eligibility_*_*")
+
+
 if "claim" in sys.modules:
     from claim.models import Claim
 
     @receiver(post_save, sender=Claim)
     @receiver(post_delete, sender=Claim)
     def clean_enquire_cache_claim(sender, instance, *args, **kwargs):
-        cache.delete(
-            f"eligibility_{instance.insuree.family_id or instance.insuree.id}"
-        )
+        cache.delete(eligibility_cache_key(instance.insuree.family_id or instance.insuree.id))
 
 @receiver(post_save, sender=Product)
 @receiver(post_delete, sender=Product)
 def clean_all_enquire_cache_product(sender, instance, *args, **kwargs):
-    if isinstance(cache, RedisCache):
-        # django-redis does not expand wildcards in delete()
-        cache.delete_pattern("eligibility_*")
-    else:
-        cache.clear()
+    invalidate_all_eligibility_cache()
 
 
 @receiver(post_save, sender=Policy)
 @receiver(post_delete, sender=Policy)
 def clean_all_enquire_cache_policy(sender, instance, *args, **kwargs):
-    cache.delete(f"eligibility_{instance.family_id}")
+    cache.delete(eligibility_cache_key(instance.family_id))
 
 
 @receiver(post_save, sender=InsureePolicy)
 @receiver(post_delete, sender=InsureePolicy)
 def clean_enquire_cache_insuree_policy(sender, instance, *args, **kwargs):
-    cache.delete(
-        f"eligibility_{instance.insuree.family_id or instance.insuree_id}"
-    )
+    cache.delete(eligibility_cache_key(instance.insuree.family_id or instance.insuree_id))
 
 
 @receiver(post_save, sender=Family)
 @receiver(post_delete, sender=Family)
 def clean_all_enquire_cache_family(sender, instance, *args, **kwargs):
-    cache.delete(f"eligibility_{instance.id}")
+    cache.delete(eligibility_cache_key(instance.id))

@@ -61,13 +61,12 @@ def set_start_date(policy):
 def set_expiry_date(policy, family, enroll_date):
     logger.debug("enroll_date %s", enroll_date)
     member = family.members.filter(validity_to__isnull=True).first()
-    logger.debug("Memebers %s", member.dob)
-    date_format = "%Y-%m-%d"
-    today = py_datetime.datetime.strptime(str(py_datetime.datetime.now().date()), date_format)
-    insuree_dob = py_datetime.datetime.strptime(str(member.dob), date_format)
-    delta = today - insuree_dob
-    age_patient = int(round(delta.days / 365.0))
-    logger.debug("age_patient %s", age_patient)
+    # plain dates on both sides: the expiry date ends up in a DateField
+    insuree_dob = py_datetime.datetime.strptime(str(member.dob), "%Y-%m-%d").date() \
+        if member is not None and member.dob else None
+    logger.debug("Member dob %s", insuree_dob)
+    if insuree_dob:
+        logger.debug("age_patient %s", int(round((py_datetime.date.today() - insuree_dob).days / 365.0)))
     product = policy.product
     logger.debug("Age Max sur le produit %s", product.age_maximal)
     logger.debug("Age Min sur le produit %s", product.age_minimal)
@@ -81,13 +80,13 @@ def set_expiry_date(policy, family, enroll_date):
             insurance_period -
             datetimedelta(days=1)
     ).to_ad_date()
-    if product.age_maximal:
+    if product.age_maximal and insuree_dob:
         age_at_expiry = relativedelta(expiry_date, insuree_dob)
         if age_at_expiry.years > product.age_maximal or \
             (age_at_expiry.years == product.age_maximal and age_at_expiry.months > 0):
             expiry_date = insuree_dob + relativedelta(years=product.age_maximal)
 
-    else:
+    elif not product.age_maximal:
         logger.debug("The product does not have the max age")
     policy.expiry_date = expiry_date
 
@@ -222,13 +221,16 @@ def set_value(policy, family, prev_policy):
 
 
 def policy_values(policy, family, prev_policy, user, enroll_date, members=None):
-    if not members:
-        members = family.members.filter(validity_to__isnull=True).count()
+    """`members`: the insurees to count instead of the active members of `family`."""
+    if members:
+        member_count = len(members)
+    else:
+        member_count = family.members.filter(validity_to__isnull=True).count()
     max_members = policy.product.max_members
-    above_max = max(0, members - max_members)
+    above_max = max(0, member_count - max_members)
     warnings = []
     if above_max:
-        warnings.append(_("policy.validation.members_count_above_max") % {'max': max_members, 'count': members})
+        warnings.append(_("policy.validation.members_count_above_max") % {'max': max_members, 'count': member_count})
     set_start_date(policy)
     set_expiry_date(policy, family, enroll_date)
     set_value(policy, family, prev_policy)
