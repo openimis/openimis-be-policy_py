@@ -36,7 +36,7 @@ def create_test_policy2(product, insuree, link=True, valid=True, custom_props=No
     :param custom_props: dictionary of custom values for the Policy, when overriding a foreign key, override the _id
     :return: The created Policy and InsureePolicy
     """
-    product = create_test_product()
+    product = create_test_product("TEST")
     user = create_test_interactive_user()
     benefit_plan_type = ContentType.objects.get_for_model(Product)
     contribution_plan = ContributionPlan(
