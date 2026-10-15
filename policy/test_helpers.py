@@ -13,8 +13,6 @@ import datetime
 import uuid
 from product.test_helpers import create_test_product
 from django.contrib.contenttypes.models import ContentType
-import random
-import string
 
 
 def create_test_policy(product, insuree, link=True, valid=True, custom_props=None, check=False, contribution_plan=None):
@@ -38,9 +36,10 @@ def create_test_policy2(product, insuree, link=True, valid=True, custom_props=No
     :return: The created Policy and InsureePolicy
     """
     product = create_test_product("TEST")
-    caracteres = string.ascii_letters + string.digits
-    name =  ''.join(random.choice(caracteres) for _ in range(17))
-    user = create_test_interactive_user(username=name)
+    try:
+        user = User.objects.get(username='TestInteractiveTest')
+    except ObjectDoesNotExist:
+        user = create_test_interactive_user()
     benefit_plan_type = ContentType.objects.get_for_model(Product)
     contribution_plan = ContributionPlan(
         code="AMS",
