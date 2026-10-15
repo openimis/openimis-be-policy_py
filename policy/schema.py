@@ -27,6 +27,7 @@ from .gql_queries import *  # lgtm [py/polluting-import]
 from .gql_mutations import *  # lgtm [py/polluting-import]
 
 from .values import policy_values
+from contribution_plan.models import ContributionPlan
 
 
 class Query(graphene.ObjectType):
@@ -36,7 +37,9 @@ class Query(graphene.ObjectType):
         stage=graphene.String(required=True),
         enrollDate=graphene.DateTime(required=True),
         product_id=graphene.Int(required=True),
-        family_id=graphene.Int(required=True)
+        family_id=graphene.Int(required=True),
+        contribution_plan_uuid = graphene.UUID(required=True),
+        periodicity = graphene.String(required=False)
     )
     policies = OrderedDjangoFilterConnectionField(
         PolicyGQLType,
@@ -68,6 +71,7 @@ class Query(graphene.ObjectType):
         show_history=graphene.Boolean(),
         order_by=graphene.String(),
         target_date=graphene.Date(),
+        show_deleted=graphene.Boolean(),
     )
     # TODO: refactoring
     # Eligibility is calculated for a Policy... which is bound to a Family (not an Insuree)
@@ -98,6 +102,13 @@ class Query(graphene.ObjectType):
         if not info.context.user.has_perms(PolicyConfig.gql_query_policies_perms):
             raise PermissionDenied(_("unauthorized"))
 
+        contribution_plan = ContributionPlan.objects.filter(
+            uuid=str(
+                kwargs.get('contribution_plan_uuid')
+            )
+        )
+        if not contribution_plan:
+            raise ValidationError(_("policy.mutation.contribution_plan_not_found"))
         product = Product.objects.filter(
             Q(validity_to__isnull=True),
             Q(id=kwargs.get('product_id')) | Q(legacy_id=kwargs.get('product_id')),
@@ -112,6 +123,8 @@ class Query(graphene.ObjectType):
             enroll_date=kwargs.get('enrollDate'),
             start_date=kwargs.get('enrollDate'),
             product=product,
+            contribution_plan=contribution_plan[0].id,
+            periodicity=kwargs.get("periodicity")
         )
         prefetch = Prefetch(
             'members',
@@ -124,7 +137,7 @@ class Query(graphene.ObjectType):
         prev_policy = None
         if 'prev_uuid' in kwargs:
             prev_policy = Policy.objects.get(uuid=kwargs.get('prev_uuid'))
-        policy, warnings = policy_values(policy, family, prev_policy)
+        policy, warnings = policy_values(policy, family, prev_policy, info.context.user)
         return PolicyAndWarningsGQLType(policy=policy, warnings=warnings)
 
     def resolve_policies(self, info, **kwargs):
@@ -177,6 +190,8 @@ class Query(graphene.ObjectType):
             policy_value=item.policy_value,
             product_code=item.product_code,
             product_name=item.product_name,
+            contribution_plan_code=item.contribution_plan_code,
+            contribution_plan_name=item.contribution_plan_name,
             start_date=item.start_date,
             enroll_date=item.enroll_date,
             effective_date=item.effective_date,
@@ -194,6 +209,9 @@ class Query(graphene.ObjectType):
             validity_from=item.validity_from,
             validity_to=item.validity_to,
             max_installments=item.max_installments,
+            signature_date = item.signature_date,
+            periodicity = item.periodicity,
+            payment_day = item.payment_day,
         )
 
     def resolve_policies_by_insuree(self, info, **kwargs):
@@ -218,6 +236,7 @@ class Query(graphene.ObjectType):
             family_uuid=kwargs.get('family_uuid'),
             active_or_last_expired_only=kwargs.get(
                 'active_or_last_expired_only', False),
+            show_deleted=kwargs.get('show_deleted', False),
             show_history=kwargs.get('show_history', False),
             order_by=kwargs.get('order_by', None),
             target_date=kwargs.get('target_date', None)

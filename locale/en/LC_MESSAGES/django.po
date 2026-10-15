@@ -65,3 +65,24 @@ msgstr "On idle policies can be updated"
 #: policy/values.py:178
 msgid "policy.validation.members_count_above_max"
 msgstr "Number of insurees %(count)s is above policy maximum: %(max)s"
+
+msgid "policy.signature_date_before_enroll_date"
+msgstr "The signature date cannot be earlier than the enrolment date."
+
+msgid "policy.periodicity_required_if_signed"
+msgstr "Periodicity is required when a signature date is provided."
+
+msgid "policy.payment_day_required_if_signed"
+msgstr "Payment day is required when a signature date is provided."
+
+msgid "policy.invalid_contribution_plan"
+msgstr "Invalid contribution plan selected."
+
+msgid "policy.unknown_required_periodicity_for_plan"
+msgstr "Unknown required periodicity for the contribution plan %(code)s"
+
+msgid "policy.periodicity_required"
+msgstr "Periodicity is required to validate the policy."
+
+msgid "policy.periodicity_below_min_for_plan"
+msgstr "The selected periodicity is lower than required by the contribution plan."
