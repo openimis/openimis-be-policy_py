@@ -41,16 +41,17 @@ def create_test_policy2(product, insuree, link=True, valid=True, custom_props=No
     except ObjectDoesNotExist:
         user = create_test_interactive_user()
     benefit_plan_type = ContentType.objects.get_for_model(Product)
-    contribution_plan = ContributionPlan(
-        code="AMS",
-        name="AMS Subvention totale",
-        calculation= str(uuid.uuid4()),
-        date_valid_from=datetime.date(2020, 1, 1),
-        benefit_plan_type=benefit_plan_type,
-        benefit_plan_id=product.id,
-        periodicity=1
-    )
-    contribution_plan.save(username=user.username)
+    if not contribution_plan:
+        contribution_plan = ContributionPlan(
+            code="AMS",
+            name="AMS Subvention totale",
+            calculation= str(uuid.uuid4()),
+            date_valid_from=datetime.date(2020, 1, 1),
+            benefit_plan_type=benefit_plan_type,
+            benefit_plan_id=product.id,
+            periodicity=1
+        )
+        contribution_plan.save(username=user.username)
     policy = Policy.objects.create(
         **{
             "family": insuree.family,
