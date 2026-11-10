@@ -1,4 +1,6 @@
 import json
+import datetime
+from contribution_plan.tests.helpers import create_test_contribution_plan
 from core.test_helpers import create_test_interactive_user, create_test_officer
 from core.models.openimis_graphql_test_case import openIMISGraphQLTestCase, BaseTestContext as DummyContext
 
@@ -397,3 +399,31 @@ class PolicyGraphQLTestCase(openIMISGraphQLTestCase):
 
         # This validates the status code and if you get errors
         self.assertResponseNoErrors(response)
+
+    def test_insuree_policy_value_query_from_contribution_plan(self):
+        contribution_plan = create_test_contribution_plan(product=self.product)
+        today = datetime.date.today().isoformat()
+
+        response = self.query(
+            f"""
+                {{
+                policyValues(
+                    stage: "N",
+                    enrollDate: "{today}T00:00:00",
+                    contributionPlanUuid: "{contribution_plan.id}",
+                    familyId: {self.insuree.family.id}
+                ){{
+                    policy{{startDate expiryDate value}},warnings
+                }}
+                }} """,
+            headers={"HTTP_AUTHORIZATION": f"Bearer {self.admin_token}"},
+        )
+
+        content = json.loads(response.content)
+
+        # This validates the status code and if you get errors
+        self.assertResponseNoErrors(response)
+        policy = content["data"]["policyValues"]["policy"]
+        self.assertIsNotNone(policy["startDate"])
+        self.assertIsNotNone(policy["expiryDate"])
+        self.assertIsNotNone(policy["value"])
