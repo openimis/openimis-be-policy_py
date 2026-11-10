@@ -41,13 +41,16 @@ def get_policies_for_renewal(
             break
     else:
         location = None
-    insert_renewals(
-        date_from,
-        date_to,
-        officer_id=officer,
-        reminding_interval=interval,
-        location_id=location,
-    )
+    try:
+        insert_renewals(
+            date_from,
+            date_to,
+            officer_id=officer,
+            reminding_interval=interval,
+            location_id=location,
+        )
+    except Exception as e:
+        logger.error("Error on insert_renewals %s", e)
     update_renewals()
     sms_queue = policy_renewal_sms(
         family_message_template, date_from, date_to, sms_header_template
