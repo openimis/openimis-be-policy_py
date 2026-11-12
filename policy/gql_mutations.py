@@ -31,6 +31,10 @@ class PolicyInputType(OpenIMISMutation.Input):
     is_paid = graphene.Boolean(required=False)
     receipt = graphene.String(required=False)
     payer_uuid = graphene.String(required=False)
+    contribution_plan_id = graphene.UUID(required=True)
+    signature_date = graphene.Date(required=False)
+    periodicity = graphene.String(required=False)
+    payment_day = graphene.Int(required=False)
 
 
 class CreateRenewOrUpdatePolicyMutation(OpenIMISMutation):
