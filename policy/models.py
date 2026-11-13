@@ -113,9 +113,10 @@ class Policy(core_models.VersionedModel):
     STAGE_RENEWED = "R"
 
     @classmethod
-    def get_queryset(cls, queryset, user):
+    def get_queryset(cls, queryset, user, *, validity=None, audits=None):
         """Current policies the user may see."""
-        return cls.get_scoped_queryset(cls.filter_queryset(queryset), user)
+        queryset = cls.apply_row_filters(queryset, validity, audits, default=cls.filter_queryset)
+        return cls.get_scoped_queryset(queryset, user)
 
     @classmethod
     def get_scoped_queryset(cls, queryset, user):
